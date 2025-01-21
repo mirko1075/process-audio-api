@@ -70,7 +70,7 @@ def split_audio(input_file, output_dir, chunk_duration=CHUNK_DURATION_SECONDS, o
                 '-acodec', 'libmp3lame', '-y', chunk_filename
             ]
             logging.debug(f"Creating chunk: {chunk_filename} with duration {duration} seconds")
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=300)
             logging.error(f"FFmpeg error: {result.stderr.strip()}")
             if os.path.exists(chunk_filename):
                 logging.debug(f"Chunk created: {chunk_filename}")
