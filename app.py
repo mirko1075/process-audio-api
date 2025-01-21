@@ -165,11 +165,13 @@ def text_to_file():
     if not data or 'text' not in data:
         logging.error("No text provided")
         return jsonify({"error": "No text provided"}), 400
-
+    if not data or 'fileName' not in data:
+        logging.error("No fileName provided")
+        return jsonify({"error": "No fileName provided"}), 400
     try:
         text = data['text']
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"text_{timestamp}.txt"
+        filename = data['fileName'] + f"_{timestamp}.txt"
         
         # Create file-like object in memory
         file_obj = io.BytesIO()
