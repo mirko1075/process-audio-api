@@ -5,6 +5,7 @@ from pathlib import Path
 from groq import Groq
 import subprocess
 import logging
+import ffmpeg
 
 # Constants
 MAX_CHUNK_SIZE_MB = 20  # Max file size in MB before we chunk
@@ -65,13 +66,16 @@ def split_audio(input_file, output_dir, chunk_duration=CHUNK_DURATION_SECONDS, o
         for idx, start in enumerate(start_times):
             chunk_filename = os.path.join(output_dir, f"{Path(input_file).stem}_chunk{idx + 1}.mp3")
             duration = min(chunk_duration, total_duration - start)
-            cmd = [
-                'ffmpeg', '-i', input_file, '-ss', str(start), '-t', str(duration),
-                '-acodec', 'libmp3lame', '-y', chunk_filename
-            ]
-            logging.debug(f"Creating chunk: {chunk_filename} with duration {duration} seconds")
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=300)
-            logging.error(f"FFmpeg error: {result.stderr.strip()}")
+
+            # Use ffmpeg-python to create the chunk
+            (
+                ffmpeg
+                .input(input_file, ss=start, t=duration)
+                .output(chunk_filename, acodec='libmp3lame')
+                .run(overwrite_output=True)
+            )
+
+            # Check if the chunk file was created successfully
             if os.path.exists(chunk_filename):
                 logging.debug(f"Chunk created: {chunk_filename}")
                 chunk_files.append(chunk_filename)
