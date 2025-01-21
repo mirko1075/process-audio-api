@@ -1,10 +1,12 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 import os
 import subprocess
 import logging
 from process_audio import process_file, convert_to_wav  # Ensure this uses the updated process_audio.py
 from functools import wraps
 from dotenv import load_dotenv
+import io
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
@@ -87,6 +89,104 @@ def process_audio():
             logging.debug(f"Cleaning up temporary files in {temp_dir}")
             for file in os.listdir(temp_dir):
                 os.remove(os.path.join(temp_dir, file))
+
+@app.route("/process-to-file", methods=["POST"])
+@require_api_key
+def process_audio_to_file():
+    """
+    API endpoint to process audio and return the transcription as a text file.
+    """
+    logging.debug("Received request to process audio to file")
+    
+    if "audio" not in request.files:
+        logging.error("No file uploaded")
+        return jsonify({"error": "No file uploaded"}), 400
+
+    audio_file = request.files["audio"]
+    input_path = os.path.join("/tmp", audio_file.filename)
+    wav_path = os.path.join("/tmp", f"{os.path.splitext(audio_file.filename)[0]}.wav")
+
+    try:
+        # Save the uploaded file
+        audio_file.save(input_path)
+
+        # Convert to WAV if needed
+        if not input_path.lower().endswith(".wav"):
+            convert_to_wav(input_path, wav_path)
+        else:
+            wav_path = input_path
+
+        # Process the WAV file
+        transcription = process_file(wav_path, "/tmp/temp")
+
+        # Create text file in memory
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"transcription_{timestamp}.txt"
+        
+        # Create file-like object in memory
+        file_obj = io.BytesIO()
+        file_obj.write(transcription.encode('utf-8'))
+        file_obj.seek(0)
+
+        # Clean up
+        if input_path != wav_path:
+            os.remove(input_path)
+        os.remove(wav_path)
+
+        # Return the file
+        return send_file(
+            file_obj,
+            mimetype='text/plain',
+            as_attachment=True,
+            download_name=filename
+        )
+
+    except Exception as e:
+        logging.error(f"Error processing audio to file: {e}")
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        # Clean up temporary files
+        temp_dir = "/tmp/temp"
+        if os.path.exists(temp_dir):
+            for file in os.listdir(temp_dir):
+                os.remove(os.path.join(temp_dir, file))
+
+@app.route("/text-to-file", methods=["POST"])
+@require_api_key
+def text_to_file():
+    """
+    API endpoint to create a text file from input text.
+    """
+    logging.debug("Received request to create text file")
+    
+    # Get JSON data from request
+    data = request.get_json()
+    if not data or 'text' not in data:
+        logging.error("No text provided")
+        return jsonify({"error": "No text provided"}), 400
+
+    try:
+        text = data['text']
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"text_{timestamp}.txt"
+        
+        # Create file-like object in memory
+        file_obj = io.BytesIO()
+        file_obj.write(text.encode('utf-8'))
+        file_obj.seek(0)
+
+        # Return the file
+        return send_file(
+            file_obj,
+            mimetype='text/plain',
+            as_attachment=True,
+            download_name=filename
+        )
+
+    except Exception as e:
+        logging.error(f"Error creating text file: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/transcribe', methods=['POST'])
 @require_api_key
