@@ -2,10 +2,10 @@
 
 import os
 from pathlib import Path
-from groq import Groq
 import subprocess
 import logging
 import ffmpeg
+import openai
 
 # Constants
 MAX_CHUNK_SIZE_MB = 20  # Max file size in MB before we chunk
@@ -88,23 +88,27 @@ def split_audio(input_file, output_dir, chunk_duration=CHUNK_DURATION_SECONDS, o
         logging.error(f"Error splitting audio: {e}")
         raise
 
-def transcribe_audio(client, audio_file, model="whisper-large-v3", language="en"):
+def transcribe_audio(audio_file):
     """
-    Transcribes an audio file using Groq's Whisper model.
+    Transcribes an audio file using OpenAI's Whisper API.
     """
     try:
+        # Set your OpenAI API key
+        openai.api_key = os.getenv("OPENAI_API_KEY")
+
+        # Open the audio file in binary mode
         with open(audio_file, "rb") as file:
-            transcription = client.audio.transcriptions.create(
-                file=(os.path.basename(audio_file), file.read()),
-                model=model,
-                language=language,
+            response = openai.audio.transcriptions.create(
+                model="whisper-1",
+                file=file,
+                language="en"
             )
-            return transcription.text
+        return response.text
     except Exception as e:
         logging.error(f"Error transcribing {audio_file}: {e}")
         raise
 
-def process_file(client, file_path, temp_dir):
+def process_file(file_path, temp_dir):
     """
     Processes a single audio file: splits if necessary, transcribes, and combines results.
     """
@@ -118,7 +122,7 @@ def process_file(client, file_path, temp_dir):
 
         if file_size <= MAX_CHUNK_SIZE_MB * 1024 * 1024:
             logging.info("File under size limit - processing as single file")
-            text = transcribe_audio(client, file_path, language="en")
+            text = transcribe_audio(file_path)  # Use the Whisper API
             logging.debug(f"Transcription result: {text}")
             return text
         else:
@@ -129,9 +133,7 @@ def process_file(client, file_path, temp_dir):
             combined_texts = []
             for i, chunk in enumerate(chunk_files, 1):
                 logging.debug(f"Processing chunk {i}/{len(chunk_files)}: {chunk}")
-                chunk_duration = get_duration(chunk)
-                logging.debug(f"Chunk duration: {chunk_duration / 60:.2f} minutes")
-                text = transcribe_audio(client, chunk, language="en")
+                text = transcribe_audio(chunk)  # Use the Whisper API
                 combined_texts.append(text)
                 os.remove(chunk)
                 logging.info(f"Chunk {i} processed and removed")

@@ -1,9 +1,8 @@
 from flask import Flask, request, jsonify
 import os
 import subprocess
-from groq import Groq  # Import Groq library for transcription
-from process_audio import process_file, convert_to_wav
 import logging
+from process_audio import process_file, convert_to_wav  # Ensure this uses the updated process_audio.py
 
 app = Flask(__name__)
 
@@ -13,7 +12,7 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 @app.route("/process", methods=["POST"])
 def process_audio():
     """
-    API endpoint to process and transcribe audio files using Groq Whisper.
+    API endpoint to process and transcribe audio files using OpenAI Whisper.
     """
     logging.debug("Received request to process audio")
     
@@ -38,18 +37,9 @@ def process_audio():
             wav_path = input_path  # If already a WAV file, use as is
             logging.debug(f"Using existing WAV file: {wav_path}")
 
-        # Ensure Groq API key is available
-        groq_api_key = os.getenv("GROQ_API_KEY")
-        if not groq_api_key:
-            logging.error("GROQ_API_KEY not set in environment")
-            return jsonify({"error": "GROQ_API_KEY not set in environment"}), 500
-
-        # Initialize Groq client
-        client = Groq(api_key=groq_api_key)
-
-        # Process the WAV file
+        # Process the WAV file using OpenAI Whisper API
         logging.debug(f"Processing WAV file: {wav_path}")
-        transcription = process_file(client, wav_path, "/tmp/temp")
+        transcription = process_file(wav_path, "/tmp/temp")  # Ensure this uses the updated process_file
 
         # Check if transcription is valid
         if not transcription or not isinstance(transcription, str):
