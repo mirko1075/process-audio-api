@@ -1,13 +1,13 @@
 from flask import Flask, request, jsonify, send_file
 import os
-import subprocess
 import logging
-from process_audio import process_file, convert_to_wav  # Ensure this uses the updated process_audio.py
+from process_audio import process_file, convert_to_wav, detect_language_with_whisper  # Ensure this uses the updated process_audio.py
 from functools import wraps
 from dotenv import load_dotenv
 import io
 from datetime import datetime
-
+import subprocess
+import requests
 # Load environment variables
 load_dotenv()
 
@@ -17,8 +17,16 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 API_KEY = os.getenv('API_KEY')
+DEEPGRAM_API_KEY = os.getenv('DEEPGRAM_API_KEY')
+DEEPGRAM_API_SENTIMENT_URL = os.getenv('DEEPGRAM_API_SENTIMENT_URL')
 if not API_KEY:
     raise ValueError("API_KEY must be set in .env file")
+
+if not DEEPGRAM_API_SENTIMENT_URL:
+    raise ValueError("DEEPGRAM_API_SENTIMENT_URL must be set in .env file.")
+
+if not DEEPGRAM_API_KEY:
+    raise ValueError("DEEPGRAM_API_KEY must be set in .env file.")
 
 def require_api_key(f):
     @wraps(f)
@@ -30,6 +38,10 @@ def require_api_key(f):
         return jsonify({"error": "Invalid or missing API key"}), 401
     return decorated
 
+@app.route("/", methods=["GET"])
+def home():
+    return jsonify({"message": "Hello, World!"})
+           
 @app.route("/process", methods=["POST"])
 @require_api_key
 def process_audio():
@@ -190,11 +202,76 @@ def text_to_file():
         logging.error(f"Error creating text file: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/transcribe', methods=['POST'])
+@app.route('/translate', methods=['POST'])
 @require_api_key
-def transcribe():
+def translate():
     # Your existing route code here
     pass
+
+
+@app.route("/sentiment", methods=["POST"])
+@require_api_key
+def sentiment():
+    """
+    Endpoint to analyze sentiment using Deepgram's API.
+    """
+    try:
+        # Validate request payload
+        if "text" not in request.json:
+            return jsonify({"error": "Text input is required."}), 400
+
+        text = request.json["text"]
+        language = request.json.get("language", "en")  # Default to English
+
+        # Ensure only English is supported
+        if language != "en":
+            return jsonify({
+                "error": f"Unsupported language '{language}'. Only English is supported."
+            }), 400
+
+        # Prepare request payload and headers
+        payload = {
+            "text": text
+        }
+        headers = {
+            "Authorization": f"Token {DEEPGRAM_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        params = {
+            "sentiment": "true",
+            "language": language
+        }
+
+        # Send request to Deepgram API
+        response = requests.post(DEEPGRAM_API_SENTIMENT_URL, headers=headers, params=params, json=payload)
+        response.raise_for_status()
+
+        # Parse and return the response
+        result = response.json()
+        return jsonify({
+            "message": "Sentiment analysis complete.",
+            "data": result["results"]["sentiments"]
+        })
+
+    except requests.RequestException as e:
+        return jsonify({"error": f"Deepgram API request failed: {e}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+
+
+#detect language with whisper
+@app.route("/detect-language", methods=["POST"])
+@require_api_key
+def detect_language():
+    """
+    Endpoint to detect language using Whisper.
+    """
+    try:
+        audio_file = request.files["audio"]
+        language = detect_language_with_whisper(audio_file)
+        return jsonify({"language": language})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
