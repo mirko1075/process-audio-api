@@ -113,7 +113,7 @@ def process_audio_to_file():
     if "audio" not in request.files:
         logging.error("No file uploaded")
         return jsonify({"error": "No file uploaded"}), 400
-
+    language = request.json.get("language", "en")
     audio_file = request.files["audio"]
     input_path = os.path.join("/tmp", audio_file.filename)
     wav_path = os.path.join("/tmp", f"{os.path.splitext(audio_file.filename)[0]}.wav")
@@ -129,7 +129,7 @@ def process_audio_to_file():
             wav_path = input_path
 
         # Process the WAV file
-        transcription = process_file(wav_path, "/tmp/temp")
+        transcription = process_file(wav_path, "/tmp/temp", language)
 
         # Create text file in memory
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -258,20 +258,6 @@ def sentiment():
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
-
-#detect language with whisper
-@app.route("/detect-language", methods=["POST"])
-@require_api_key
-def detect_language():
-    """
-    Endpoint to detect language using Whisper.
-    """
-    try:
-        audio_file = request.files["audio"]
-        language = detect_language_with_whisper(audio_file)
-        return jsonify({"language": language})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

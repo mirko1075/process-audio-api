@@ -8,13 +8,8 @@ import ffmpeg
 import openai
 import requests
 from dotenv import load_dotenv
-import whisper
 
 load_dotenv()
-DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
-DEEPGRAM_API_URL = os.getenv("DEEPGRAM_API_URL")
-print(f"DEEPGRAM_API_KEY: {DEEPGRAM_API_KEY}")
-print(f"DEEPGRAM_API_URL: {DEEPGRAM_API_URL}")
 
 # Constants
 MAX_CHUNK_SIZE_MB = 20  # Max file size in MB before we chunk
@@ -118,7 +113,7 @@ def transcribe_audio(audio_file, language):
         logging.error(f"Error transcribing {audio_file}: {e}")
         raise
 
-def process_file(file_path, temp_dir):
+def process_file(file_path, temp_dir, language):
     """
     Processes a single audio file: splits if necessary, transcribes, and combines results.
     """
@@ -133,11 +128,7 @@ def process_file(file_path, temp_dir):
         if file_size <= MAX_CHUNK_SIZE_MB * 1024 * 1024:
             logging.info("File under size limit - processing as single file")
 
-            # Detect language and transcribe the single file
-            detected_language = detect_language_with_deepgram(file_path)
-            logging.info(f"Detected language: {detected_language}")
-
-            text = transcribe_audio(file_path, detected_language)  # Use the Whisper API
+            text = transcribe_audio(file_path, language)  # Use the Whisper API
             logging.debug(f"Transcription result: {text}")
             return text
         else:
@@ -145,16 +136,10 @@ def process_file(file_path, temp_dir):
             chunk_files = split_audio(file_path, temp_dir)
             logging.debug(f"Split into {len(chunk_files)} chunks")
 
-
-            # Detect language from the first chunk
-            detected_language = detect_language_with_deepgram(chunk_files[0])
-            logging.info(f"Detected language from first chunk: {detected_language}")
-
-
             combined_texts = []
             for i, chunk in enumerate(chunk_files, 1):
                 logging.debug(f"Processing chunk {i}/{len(chunk_files)}: {chunk}")
-                text = transcribe_audio(chunk, detected_language)  # Use the Whisper API
+                text = transcribe_audio(chunk, language)  # Use the Whisper API
                 combined_texts.append(text)
                 os.remove(chunk)
                 logging.info(f"Chunk {i} processed and removed")
@@ -165,74 +150,3 @@ def process_file(file_path, temp_dir):
     except Exception as e:
         logging.error(f"Error processing file: {file_path}, {e}")
         raise
-
-def detect_language_with_deepgram(audio_file_path):
-    """
-    Detect the language of the audio file using Deepgram's API.
-    """
-    logging.debug(f"Detecting language with Deepgram for {audio_file_path}")
-    logging.debug(f"DEEPGRAM_API_KEY: {DEEPGRAM_API_KEY}")
-    try:
-        headers = {
-            "Authorization": f"Token {DEEPGRAM_API_KEY}",
-            "Content-Type": "audio/wav",
-        }
-        params = {
-            "model": "nova-2-general",
-            "detect_language": "true",
-        }
-
-        with open(audio_file_path, "rb") as file:
-            response = requests.post(DEEPGRAM_API_URL, headers=headers, params=params, data=file)
-            response.raise_for_status()
-            result = response.json()
-
-            # Extract the detected language
-            detected_language = result["results"]["channels"][0]["detected_language"]
-            confidence = result["results"]["channels"][0].get("language_confidence", 1.0)
-            logging.info(f"Detected language: {detected_language} (Confidence: {confidence:.2f})")
-            return detected_language
-    except requests.RequestException as e:
-        logging.error(f"Error detecting language with Deepgram: {e}")
-        return "en"  # Default to English on error
-    
-def detect_language_with_whisper(audio_file):
-    """
-    Detect the language of an audio file using Whisper.
-    """
-    try:
-        # Save the file temporarily
-        temp_path = os.path.join("/tmp", audio_file.filename)
-        audio_file.save(temp_path)
-        
-        logging.debug(f"Detecting language with Whisper for {temp_path}")
-        
-        # Load Whisper model
-        model = whisper.load_model("large")
-        
-        # Ensure the audio file is in the correct format (Mono, 16kHz)
-        processed_audio_path = os.path.join("/tmp", f"processed_{audio_file.filename}")
-        subprocess.run([
-            "ffmpeg", "-i", temp_path, 
-            "-ac", "1", "-ar", "16000", "-y", processed_audio_path
-        ], check=True)
-        
-        # Load and preprocess audio
-        audio = whisper.load_audio(processed_audio_path)
-        audio = whisper.pad_or_trim(audio)
-        mel = whisper.log_mel_spectrogram(audio).to(model.device)
-        
-        # Detect language
-        _, probs = model.detect_language(mel)
-        detected_language = max(probs, key=probs.get)
-        
-        logging.info(f"Detected language: {detected_language}")
-        
-        # Clean up temporary files
-        os.remove(temp_path)
-        os.remove(processed_audio_path)
-        
-        return detected_language
-    except Exception as e:
-        logging.error(f"Error detecting language with Whisper: {e}")
-        return "en"  # Default to English on error
