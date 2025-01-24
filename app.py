@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, send_file
 import os
 import logging
-from process_audio import process_file, convert_to_wav, detect_language_with_whisper  # Ensure this uses the updated process_audio.py
+from process_audio import process_file, convert_to_wav  # Ensure this uses the updated process_audio.py
 from functools import wraps
 from dotenv import load_dotenv
 import io
