@@ -49,7 +49,10 @@ def process_audio():
     API endpoint to process and transcribe audio files using OpenAI Whisper.
     """
     logging.debug("Received request to process audio")
-    
+    language = request.form.get("language")  # Ricevi la lingua dalla richiesta
+    if not language:
+        return jsonify({"error": "Language not specified"}), 400
+
     if "audio" not in request.files:
         logging.error("No file uploaded")
         return jsonify({"error": "No file uploaded"}), 400
@@ -73,7 +76,7 @@ def process_audio():
 
         # Process the WAV file using OpenAI Whisper API
         logging.debug(f"Processing WAV file: {wav_path}")
-        transcription = process_file(wav_path, "/tmp/temp")  # Ensure this uses the updated process_file
+        transcription = process_file(wav_path, "/tmp/temp", language)  # Ensure this uses the updated process_file
 
         # Check if transcription is valid
         if not transcription or not isinstance(transcription, str):
