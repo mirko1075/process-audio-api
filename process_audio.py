@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 
+from collections import defaultdict
 import os
 from pathlib import Path
+from pprint import pprint
 import subprocess
 import logging
 import ffmpeg
+from flask import json
 import openai
 import requests
 from dotenv import load_dotenv
-
+import assemblyai as aai
+from transformers import pipeline
+import re
 load_dotenv()
 
 # Constants
@@ -16,7 +21,17 @@ MAX_CHUNK_SIZE_MB = 20  # Max file size in MB before we chunk
 OVERLAP_SECONDS = 30  # Overlap between chunks (in seconds)
 CHUNK_DURATION_SECONDS = 19 * 60  # Each chunk is 19 minutes (in seconds)
 
+aai.settings.api_key = os.getenv("ASSEMBLYAI_API_KEY")
+if not aai.settings.api_key:
+    raise ValueError("ASSEMBLYAI_API_KEY must be set in the .env file")
+
 logging.basicConfig(level=logging.DEBUG)
+
+
+def split_text_at_sentences(text):
+    # Split text at sentence boundaries (., !, ?)
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    return sentences
 
 def convert_to_wav(input_path, output_path):
     """
@@ -150,3 +165,101 @@ def process_file(file_path, temp_dir, language):
     except Exception as e:
         logging.error(f"Error processing file: {file_path}, {e}")
         raise
+
+def transcribe_audio_assemblyai(file_path=None, language=None, best_model=False):
+    """
+    Transcribes audio using AssemblyAI API. Supports both file URLs and local file paths.
+
+    Args:
+        file_url (str): URL of the audio file to transcribe.
+        file_path (str): Local path of the audio file to transcribe.
+
+    Returns:
+        dict: Transcription result or error message.
+    """
+    try:
+        if best_model:
+            speech_model = aai.SpeechModel.best
+        else:
+            speech_model = aai.SpeechModel.nano
+        if not file_path:
+            raise ValueError("Either file_url or file_path must be provided.")
+        
+        if language:
+            language = language
+            language_detection = False
+        else:
+            language = None
+            language_detection = True
+        logging.debug(f"ASSEMBLYAI LANGUAGE: {language}")
+        logging.debug(f"ASSEMBLYAI LANGUAGE DETECTION: {language_detection}")
+        logging.debug(f"ASSEMBLYAI SPEECH MODEL: {speech_model}")
+        config = aai.TranscriptionConfig(speech_model=speech_model, language_detection=True, speaker_labels=True, punctuate=True, format_text=True)
+
+        logging.debug(f"ASSEMBLYAI CONFIG: {config}")
+        transcriber = aai.Transcriber(config=config)
+
+        # Transcribe from a URL
+        transcript = transcriber.transcribe(file_path)
+        print(f"ASSEMBLYAI RESPONSE: {transcript}")
+        # Handle errors
+        if transcript.status == aai.TranscriptStatus.error:
+            return {"ASSEMBLYAI error": transcript.error}
+
+
+        # Return transcription text
+        return {"text": transcript.text}
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def perform_sentiment_analysis(text=None, best_model=False):
+    """
+    Performs sentiment analysis on the given text.
+
+    Args:
+        text (str): The text to analyze.
+        best_model (bool): Whether to use the best model (not used in this example).
+
+    Returns:
+        dict: Sentiment analysis results.
+    """
+    try:
+
+        # Load a pre-trained sentiment analysis model
+        sentiment_analyzer = pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
+        # Split text into sentences
+        sentences = split_text_at_sentences(text)
+
+        # Analyze sentiment for each sentence
+        results = []
+        for sentence in sentences:
+            if sentence.strip():  # Skip empty strings
+                result = sentiment_analyzer(sentence)
+                results.append((sentence, result[0]['label'], result[0]['score'] * 100))
+
+        # Aggregate sentiment results
+        sentiment_counts = defaultdict(int)
+        total_score = 0
+
+        for sentence, label, score in results:
+            sentiment_counts[label] += 1
+            total_score += score if label == "positive" else -score
+
+        # Calculate average sentiment
+        average_sentiment = "POSITIVE" if total_score >= 0 else "NEGATIVE"
+        average_confidence = abs(total_score) / len(results)
+
+        # Return results
+        return {
+            "sentiment_analysis": results,
+            "average_sentiment": average_sentiment,
+            "average_confidence": average_confidence,
+            "positive_sentences": sentiment_counts.get("positive", 0),
+            "negative_sentences": sentiment_counts.get("negative", 0),
+            "neutral_sentences": sentiment_counts.get("neutral", 0)
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
