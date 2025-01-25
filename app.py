@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, send_file
 import os
 import logging
-from process_audio import perform_sentiment_analysis, process_file, convert_to_wav, transcribe_audio_assemblyai, translate_audio_assemblyai  # Ensure this uses the updated process_audio.py
+from process_audio import perform_sentiment_analysis, process_file, convert_to_wav, transcribe_audio_assemblyai # Ensure this uses the updated process_audio.py
 from functools import wraps
 from dotenv import load_dotenv
 import io
