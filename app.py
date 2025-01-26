@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 import io
 from datetime import datetime
 
+from sentiment_analysis import allowed_file, generate_excel_from_data, query_assistant
+
 
 # Load environment variables
 load_dotenv()
@@ -255,6 +257,45 @@ def sentiment_analysis():
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
+@app.route("/process-sentiment", methods=["POST"])
+@require_api_key
+def process_sentiment():
+    """
+    Endpoint to process sentiment analysis and generate Excel files.
+    """
+    try:
+        # Validate the request files
+        if 'queries' not in request.files or 'sentiment_json' not in request.form:
+            return jsonify({"error": "Missing required files: queries and/or sentiment_json"}), 400
+
+        queries_file = request.files['queries']
+        sentiment_json = request.form.get('sentiment_json')
+
+        # Validate file formats
+        if not (queries_file and allowed_file(queries_file.filename)):
+            return jsonify({"error": "Invalid queries file format. Only .xls or .xlsx are allowed."}), 400
+
+        assistant_response = query_assistant(queries_file, sentiment_json)
+       # DEBUG: Log the assistant response
+        print(f"Assistant Response: {assistant_response}")
+
+        
+        # Check if the assistant returned a direct Excel binary
+        if "EXCEL_BINARY:" in assistant_response:
+            # Extract binary data from the response
+            excel_binary = assistant_response.split("EXCEL_BINARY:")[1].strip()
+            return send_file(
+                io.BytesIO(bytes.fromhex(excel_binary)),
+                mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                as_attachment=True,
+                download_name="sentiment_analysis.xlsx"
+            )
+        else:
+            # Assistant returned structured data, generate the Excel in the backend
+            return generate_excel_from_data(assistant_response)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 

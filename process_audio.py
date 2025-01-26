@@ -191,24 +191,21 @@ def transcribe_audio_assemblyai(file_path=None, language=None, best_model=False)
         else:
             language = None
             language_detection = True
-        logging.debug(f"ASSEMBLYAI LANGUAGE: {language}")
-        logging.debug(f"ASSEMBLYAI LANGUAGE DETECTION: {language_detection}")
-        logging.debug(f"ASSEMBLYAI SPEECH MODEL: {speech_model}")
+
         config = aai.TranscriptionConfig(speech_model=speech_model, language_detection=True, speaker_labels=True, punctuate=True, format_text=True)
 
-        logging.debug(f"ASSEMBLYAI CONFIG: {config}")
         transcriber = aai.Transcriber(config=config)
 
         # Transcribe from a URL
         transcript = transcriber.transcribe(file_path)
-        print(f"ASSEMBLYAI RESPONSE: {transcript}")
+        logging.debug(f"ASSEMBLYAI TRANSCRIPT DONE")
         # Handle errors
         if transcript.status == aai.TranscriptStatus.error:
             return {"ASSEMBLYAI error": transcript.error}
 
 
         # Return transcription text
-        return {"text": transcript.text}
+        return transcript.text
 
     except Exception as e:
         return {"error": str(e)}
