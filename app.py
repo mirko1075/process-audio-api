@@ -3,15 +3,13 @@ from flask import Flask, request, jsonify, send_file
 import os
 import logging
 
+from openpyxl import Workbook
 import pandas as pd
 from process_audio import perform_sentiment_analysis, process_file, convert_to_wav, transcribe_audio_assemblyai # Ensure this uses the updated process_audio.py
 from functools import wraps
 from dotenv import load_dotenv
 import io
 from datetime import datetime
-
-from sentiment_analysis import allowed_file, generate_excel_from_data, parse_assistant_response, process_sentiment_data, query_assistant
-
 
 # Load environment variables
 load_dotenv()
@@ -260,44 +258,52 @@ def sentiment_analysis():
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
-@app.route("/process-sentiment", methods=["POST"])
+
+@app.route('/generate-excel', methods=['POST'])
 @require_api_key
-def process_sentiment():
+def generate_excel():
     try:
-        # Validate the input files
-        if "queries" not in request.files or "sentiment_json" not in request.form:
-            return jsonify({"error": "Missing required files or data"}), 400
+        # Parse the incoming JSON
+        data = request.json
+        if not data or "sheets" not in data:
+            return jsonify({"error": "Invalid JSON format"}), 400
 
-        # Extract input data
-        queries_file = request.files["queries"]
-        sentiment_data = json.loads(request.form["sentiment_json"])
+        # Create a new Excel workbook
+        workbook = Workbook()
+        # Remove default sheet
+        workbook.remove(workbook.active)
 
-        # Validate file format
-        if not allowed_file(queries_file.filename):
-            return jsonify({"error": "Invalid queries file format. Only .xls or .xlsx are allowed."}), 400
+        # Process each sheet in the JSON
+        for sheet_data in data["sheets"]:
+            sheet_name = sheet_data.get("name", "Sheet")
+            sheet_info = sheet_data.get("data", [])
+            
+            # Create a new sheet
+            sheet = workbook.create_sheet(title=sheet_name)
 
-        # Call OpenAI assistant to generate structured data
-        assistant_response = query_assistant(queries_file, sentiment_data)
-        print(f"ASSISTANT RESPONSE: {assistant_response}")
-        # Parse the assistant response
-        structured_data = parse_assistant_response(assistant_response)
+            for table in sheet_info:
+                columns = table.get("columns", [])
+                rows = table.get("rows", [])
 
-        # If the response is invalid, fall back to local processing
-        if structured_data is None:
-            logging.warning("Falling back to local processing.")
-            structured_data = process_sentiment_data(
-                sentiment_data,
-                pd.read_excel(queries_file, sheet_name="Queries")["Query"].tolist()
-            )
+                # Write the header row
+                if columns:
+                    sheet.append(columns)
+                
+                # Write the data rows
+                for row in rows:
+                    sheet.append(row)
 
-        # Generate and return the Excel file
-        return generate_excel_from_data(structured_data)
+        # Save workbook to a BytesIO stream
+        output = io.BytesIO()
+        workbook.save(output)
+        output.seek(0)
+
+        # Return the Excel file
+        return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True, download_name="data_analysis.xlsx")
 
     except Exception as e:
-        logging.error(f"Error processing sentiment: {e}")
         return jsonify({"error": str(e)}), 500
-
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
