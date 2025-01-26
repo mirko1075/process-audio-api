@@ -312,6 +312,9 @@ def generate_excel():
                          as_attachment=True, download_name="data_analysis.xlsx")
 
     except Exception as e:
+        # Log the full exception stack trace for debugging
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
