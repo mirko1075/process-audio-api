@@ -276,7 +276,7 @@ def generate_excel():
             return jsonify({"error": "Invalid JSON format 1"}), 400
         if "sheets" not in data:
             return jsonify({"error": "Invalid JSON format 2"}), 400
-
+        print(f"DATA: {data}")
         # Create a new Excel workbook
         workbook = Workbook()
         # Remove default sheet
