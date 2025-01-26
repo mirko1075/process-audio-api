@@ -23,6 +23,13 @@ API_KEY = os.getenv('API_KEY')
 if not API_KEY:
     raise ValueError("API_KEY must be set in .env file")
 
+def is_valid_json(json_string):
+    try:
+        json.loads(json_string)
+        return True
+    except json.JSONDecodeError:
+        return False
+
 
 def require_api_key(f):
     @wraps(f)
@@ -265,8 +272,10 @@ def generate_excel():
     try:
         # Parse the incoming JSON
         data = request.json
-        if not data or "sheets" not in data:
-            return jsonify({"error": "Invalid JSON format"}), 400
+        if not data or not is_valid_json(request.data.decode('utf-8')):
+            return jsonify({"error": "Invalid JSON format 1"}), 400
+        if "sheets" not in data:
+            return jsonify({"error": "Invalid JSON format 2"}), 400
 
         # Create a new Excel workbook
         workbook = Workbook()
