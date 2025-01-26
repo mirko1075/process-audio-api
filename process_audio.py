@@ -113,7 +113,6 @@ def transcribe_audio(audio_file, language):
     """
     try:
         # Set your OpenAI API key
-        openai.api_key = os.getenv("OPENAI_API_KEY")
 
         # Open the audio file in binary mode
         with open(audio_file, "rb") as file:
@@ -134,7 +133,7 @@ def process_file(file_path, temp_dir, language):
     """
     try:
         logging.debug(f"Starting to process file: {file_path}")
-        
+
         file_size = os.path.getsize(file_path)
         duration = get_duration(file_path)
         logging.debug(f"File size: {file_size / (1024 * 1024):.2f} MB")
@@ -184,7 +183,7 @@ def transcribe_audio_assemblyai(file_path=None, language=None, best_model=False)
             speech_model = aai.SpeechModel.nano
         if not file_path:
             raise ValueError("Either file_url or file_path must be provided.")
-        
+
         if language:
             language = language
             language_detection = False

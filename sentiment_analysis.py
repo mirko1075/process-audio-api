@@ -3,7 +3,9 @@ import logging
 import pandas as pd
 import io
 from flask import send_file, jsonify
-import openai
+from openai import OpenAI
+
+client = OpenAI()
 
 
 # Allowed file extensions for Excel
@@ -75,14 +77,12 @@ def query_assistant(queries_file, sentiment_data):
 
     try:
         # Call OpenAI API using the new method
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are an AI that generates Excel reports from sentiment analysis data and queries."},
-                {"role": "user", "content": prompt}
-            ]
-        )
-        assistant_response = response['choices'][0]['message']['content']
+        response = client.chat.completions.create(model="gpt-4",
+        messages=[
+            {"role": "system", "content": "You are an AI that generates Excel reports from sentiment analysis data and queries."},
+            {"role": "user", "content": prompt}
+        ])
+        assistant_response = response.choices[0].message.content
 
         # DEBUG: Log assistant response
         print(f"Assistant Response from OpenAI: {assistant_response}")
@@ -93,7 +93,7 @@ def query_assistant(queries_file, sentiment_data):
         return json.dumps({"error": str(e)})
 
 
-    
+
     except Exception as e:
         return {"error": str(e)}
 
