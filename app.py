@@ -264,8 +264,7 @@ def sentiment_analysis():
 
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
-
-
+    
 @app.route('/generate-excel', methods=['POST'])
 @require_api_key
 def generate_excel():
@@ -276,7 +275,9 @@ def generate_excel():
             return jsonify({"error": "Invalid JSON format 1"}), 400
         if "sheets" not in data:
             return jsonify({"error": "Invalid JSON format 2"}), 400
+
         print(f"DATA: {data}")
+
         # Create a new Excel workbook
         workbook = Workbook()
         # Remove default sheet
@@ -285,22 +286,14 @@ def generate_excel():
         # Process each sheet in the JSON
         for sheet_data in data["sheets"]:
             sheet_name = sheet_data.get("name", "Sheet")
-            sheet_info = sheet_data.get("data", [])
-            
+            sheet_data_rows = sheet_data.get("data", [])
+
             # Create a new sheet
             sheet = workbook.create_sheet(title=sheet_name)
 
-            for table in sheet_info:
-                columns = table.get("columns", [])
-                rows = table.get("rows", [])
-
-                # Write the header row
-                if columns:
-                    sheet.append(columns)
-                
-                # Write the data rows
-                for row in rows:
-                    sheet.append(row)
+            # Write the rows directly to the sheet
+            for row in sheet_data_rows:
+                sheet.append(row)
 
         # Save workbook to a BytesIO stream
         output = io.BytesIO()
