@@ -11,6 +11,8 @@ from dotenv import load_dotenv
 import io
 from datetime import datetime
 
+from sentiment_analysis import process_sentiment_analysis_results
+
 # Load environment variables
 load_dotenv()
 
@@ -249,21 +251,47 @@ def sentiment_analysis():
         logging.debug("Received request to perform sentiment analysis")
 
         # Save the uploaded file to a temporary location
-        text = request.json.get("text", "")
-        best_model = request.json.get("best_model", False)
+        excel_file = request.files['file']
+        if not excel_file:
+            return jsonify({"error": "No file uploaded."}), 400
 
-        # Perform sentiment analysis
+        # Read the Excel file
+        queries_df = pd.read_excel(excel_file, sheet_name="Queries")
+
+        # Perform sentiment analysis (assuming text and model are provided in the request)
+        text = request.form.get("text", "")
+        best_model = request.form.get("best_model", False)
         sentiment_results = perform_sentiment_analysis(text, best_model)
         logging.debug(f"Sentiment analysis complete: {sentiment_results}")
 
-        # Return the sentiment analysis results
-        return jsonify({
-            "message": "Sentiment analysis complete.",
-            "results": sentiment_results
-        })
+        # Process the sentiment results and queries
+        output_json = process_sentiment_analysis_results(sentiment_results, queries_df)
+
+        # Create Excel file from the JSON structure
+        workbook = Workbook()
+        workbook.remove(workbook.active)
+
+        for sheet_data in output_json["sheets"]:
+            sheet_name = sheet_data["name"]
+            sheet = workbook.create_sheet(title=sheet_name)
+
+            for row in sheet_data["data"]:
+                sheet.append(row)
+
+        # Save workbook to a BytesIO stream
+        output = io.BytesIO()
+        workbook.save(output)
+        output.seek(0)
+
+        # Return the Excel file
+        return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                         as_attachment=True, download_name="sentiment_analysis.xlsx")
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+
     
 @app.route('/generate-excel', methods=['POST'])
 @require_api_key
