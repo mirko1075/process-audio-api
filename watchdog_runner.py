@@ -65,7 +65,7 @@ def wait_for_port_to_be_free(port, retries=5, delay=1):
 
 if __name__ == "__main__":
     path = "."  # Directory to watch
-    ignore_dirs = ["./venv", "__pycache__", ".git"]  # Directories to ignore
+    ignore_dirs = ["./venv", "__pycache__", ".git", 'tmp']  # Directories to ignore
     ignore_files = [".env"]  # Files to ignore
     debounce_time = 3  # Debounce time to avoid frequent restarts
 

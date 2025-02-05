@@ -2,10 +2,10 @@ import json
 from flask import Flask, request, jsonify, send_file
 import os
 import logging
-
+import deepgram
 from openpyxl import Workbook
 import pandas as pd
-from process_audio import perform_sentiment_analysis, process_file, convert_to_wav, transcribe_audio_assemblyai # Ensure this uses the updated process_audio.py
+from process_audio import perform_sentiment_analysis, convert_to_wav, transcribe_audio_assemblyai # Ensure this uses the updated process_audio.py
 from functools import wraps
 from dotenv import load_dotenv
 import io
@@ -16,14 +16,23 @@ from sentiment_analysis import process_sentiment_analysis_results
 # Load environment variables
 load_dotenv()
 
+from deepgram import (
+    DeepgramClient,
+    PrerecordedOptions,
+    FileSource,
+)
 app = Flask(__name__)
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 API_KEY = os.getenv('API_KEY')
+DEEPGRAM_API_KEY = os.getenv('DEEPGRAM_API_KEY')
 if not API_KEY:
     raise ValueError("API_KEY must be set in .env file")
+
+# Define the maximum allowed file size (100 MB)
+MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB in bytes
 
 def is_valid_json(json_string):
     try:
@@ -130,6 +139,85 @@ def process_audio():
             for file in os.listdir(temp_dir):
                 os.remove(os.path.join(temp_dir, file))
 
+
+@app.route('/transcribe_and_translate', methods=['POST'])
+@require_api_key
+def transcribe_and_translate():
+    try:
+        logging.debug("Received request to transcribe and translate audio")
+        audio_file = request.files['audio']
+        language = request.form.get("language", "en")
+        logging.debug(f"Audio file: {audio_file}")
+        if not audio_file:
+            return jsonify({"error": "No file uploaded"}), 400
+        AUDIO_FILE = audio_file
+        logging.debug(f"Audio file: {AUDIO_FILE}")
+         # STEP 1 Create a Deepgram client using the API key
+        deepgram = DeepgramClient(DEEPGRAM_API_KEY)
+
+        buffer_data = AUDIO_FILE.read()
+
+        payload: FileSource = {
+            "buffer": buffer_data,
+        }
+
+        options = PrerecordedOptions(
+            model="nova-2",
+            smart_format=True,
+            language=language,
+            punctuate=True,
+            paragraphs=True,
+            diarize=True,
+            dictation=True,
+            filler_words=True,
+            utterances=True,
+            detect_entities=True,
+        )
+
+        response = deepgram.listen.rest.v("1").transcribe_file(payload, options, timeout=120)
+
+        # Extract transcription
+        transcript = response.to_dict().get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")
+
+        transcript = response['results']['channels'][0]['alternatives'][0]
+        formatted_transcript = []
+        current_speaker = None
+        current_text = ""
+
+        for word in transcript['words']:
+            if word['speaker'] != current_speaker:
+                if current_speaker is not None:
+                    formatted_transcript.append(f"Speaker {current_speaker}: {current_text.strip()}")
+                current_speaker = word['speaker']
+                current_text = ""
+            current_text += word['punctuated_word'] + " "
+
+        # Add the last speaker's text
+        if current_text:
+            formatted_transcript.append(f"Speaker {current_speaker}: {current_text.strip()}")
+
+        diarized_transcript = response.to_dict().get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("diarized_transcript", "")
+        # Extract confidence scores
+        confidence_scores = [word['confidence'] for word in response.to_dict().get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("words", [])]
+
+        # Extract timestamps
+        timestamps = [(word['word'], word['start'], word['end']) for word in response.to_dict().get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("words", [])]
+
+        # Extract paragraphs
+        paragraphs = response.to_dict().get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("paragraphs", {}).get("paragraphs", [])
+
+        # Extract metadata
+        metadata = response.to_dict().get("metadata", {})
+
+        # Extract entities
+        entities = response.to_dict().get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("entities", [])
+
+
+        return jsonify({"transcript": transcript, "formatted_transcript": formatted_transcript, "confidence_scores": confidence_scores, "timestamps": timestamps, "paragraphs": paragraphs, "metadata": metadata, "entities": entities})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
 @app.route("/process-to-file", methods=["POST"])
 @require_api_key
 def process_audio_to_file():
