@@ -139,7 +139,6 @@ def process_audio():
             for file in os.listdir(temp_dir):
                 os.remove(os.path.join(temp_dir, file))
 
-
 @app.route('/transcribe_and_translate', methods=['POST'])
 @require_api_key
 def transcribe_and_translate():
@@ -150,12 +149,11 @@ def transcribe_and_translate():
         logging.debug(f"Audio file: {audio_file}")
         if not audio_file:
             return jsonify({"error": "No file uploaded"}), 400
-        AUDIO_FILE = audio_file
-        logging.debug(f"Audio file: {AUDIO_FILE}")
-         # STEP 1 Create a Deepgram client using the API key
+        
+        # STEP 1: Create a Deepgram client using the API key
         deepgram = DeepgramClient(DEEPGRAM_API_KEY)
 
-        buffer_data = AUDIO_FILE.read()
+        buffer_data = audio_file.read()
 
         payload: FileSource = {
             "buffer": buffer_data,
@@ -165,57 +163,59 @@ def transcribe_and_translate():
             model="nova-2",
             smart_format=True,
             language=language,
-            punctuate=True,
-            paragraphs=True,
             diarize=True,
             dictation=True,
             filler_words=True,
             utterances=True,
             detect_entities=True,
+            sentiment=True
         )
 
-        response = deepgram.listen.rest.v("1").transcribe_file(payload, options, timeout=120)
+        response = deepgram.listen.prerecorded.v("1").transcribe_file(payload, options, timeout=240)
 
-        # Extract transcription
-        transcript = response.to_dict().get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")
-
-        transcript = response['results']['channels'][0]['alternatives'][0]
+        # Extract transcription and other data
+        result = response.results.channels[0].alternatives[0]
+        transcript = result.transcript
+        
+        # Format transcript with speaker diarization
         formatted_transcript = []
         current_speaker = None
         current_text = ""
 
-        for word in transcript['words']:
-            if word['speaker'] != current_speaker:
+        for word in result.words:
+            if word.speaker != current_speaker:
                 if current_speaker is not None:
                     formatted_transcript.append(f"Speaker {current_speaker}: {current_text.strip()}")
-                current_speaker = word['speaker']
+                current_speaker = word.speaker
                 current_text = ""
-            current_text += word['punctuated_word'] + " "
+            current_text += word.punctuated_word + " "
 
-        # Add the last speaker's text
         if current_text:
             formatted_transcript.append(f"Speaker {current_speaker}: {current_text.strip()}")
 
-        diarized_transcript = response.to_dict().get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("diarized_transcript", "")
-        # Extract confidence scores
-        confidence_scores = [word['confidence'] for word in response.to_dict().get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("words", [])]
+        # Extract other data
+        confidence_scores = [word.confidence for word in result.words]
+        timestamps = [(word.word, word.start, word.end) for word in result.words]
+        paragraphs = result.paragraphs
+        metadata = response.metadata
+        entities = result.entities if hasattr(result, 'entities') else []
+        
+        # Extract sentiment
+        sentiments = response.results.sentiments if hasattr(response.results, 'sentiments') else None
 
-        # Extract timestamps
-        timestamps = [(word['word'], word['start'], word['end']) for word in response.to_dict().get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("words", [])]
-
-        # Extract paragraphs
-        paragraphs = response.to_dict().get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("paragraphs", {}).get("paragraphs", [])
-
-        # Extract metadata
-        metadata = response.to_dict().get("metadata", {})
-
-        # Extract entities
-        entities = response.to_dict().get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("entities", [])
-
-
-        return jsonify({"transcript": transcript, "formatted_transcript": formatted_transcript, "confidence_scores": confidence_scores, "timestamps": timestamps, "paragraphs": paragraphs, "metadata": metadata, "entities": entities})
+        return jsonify({
+            "transcript": transcript, 
+            "formatted_transcript": formatted_transcript, 
+            "confidence_scores": confidence_scores, 
+            "timestamps": timestamps, 
+            "paragraphs": paragraphs, 
+            "metadata": metadata, 
+            "entities": entities,
+            "sentiments": sentiments
+        })
 
     except Exception as e:
+        logging.error(f"Error in transcribe_and_translate: {str(e)}")
         return jsonify({"error": str(e)}), 500
     
 @app.route("/process-to-file", methods=["POST"])
