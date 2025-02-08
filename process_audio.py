@@ -214,32 +214,34 @@ def delete_from_gcs(gcs_uri):
     blob = bucket.blob(blob_name)
     blob.delete()
 
-def translate_text(text, target_language):
-    """Translates text using Google Translate API and ensures proper encoding."""
+def translate_text(text_list, target_language):
+    """
+    Translates text using Google Translate API in batches of max 128 segments.
+    """
     try:
         logging.info(f"Translating text to: {target_language}")
         translate_client = translate.Client()
+        
+        # Ensure input is a list
+        if not isinstance(text_list, list):
+            text_list = [text_list]
 
-        # Ensure text is a list (Google API expects a list)
-        if not isinstance(text, list):
-            text = [text]
+        # Google Translate API allows max 128 segments per request
+        MAX_SEGMENTS = 128  
+        translated_texts = []
 
-        response = translate_client.translate(text, target_language=target_language)
+        # Split text_list into batches of MAX_SEGMENTS
+        for i in range(0, len(text_list), MAX_SEGMENTS):
+            batch = text_list[i:i + MAX_SEGMENTS]  # Create a batch
 
-        # Debugging: Print raw API response
-        for res in response:
-            logging.debug(f"DEBUG: Raw API Response -> {res}")
+            response = translate_client.translate(
+                batch, target_language=target_language
+            )
 
-        # Fix encoding issues using BeautifulSoup and html.unescape()
-        translated_text_list = [html.unescape(BeautifulSoup(res['translatedText'], "html.parser").text) for res in response]
+            # Extract translated text
+            translated_texts.extend([res["translatedText"] for res in response])
 
-        # Join translations into a single formatted text
-        joined_translated_text = "\n".join(translated_text_list)
-
-        return {
-            "translated_text_list": translated_text_list,
-            "joined_translated_text": joined_translated_text
-        }
+        return translated_texts
 
     except Exception as e:
         logging.error(f"Error during translation: {e}")
