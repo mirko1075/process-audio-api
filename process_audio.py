@@ -7,14 +7,16 @@ from pprint import pprint
 import subprocess
 import logging
 import ffmpeg
-from flask import json
 import openai
-import requests
 from dotenv import load_dotenv
 import assemblyai as aai
 from transformers import pipeline
 import re
 import tiktoken
+import time
+from google.cloud import speech_v1p1beta1 as speech
+from google.cloud import storage
+
 load_dotenv()
 
 # Constants
@@ -27,6 +29,16 @@ if not aai.settings.api_key:
     raise ValueError("ASSEMBLYAI_API_KEY must be set in the .env file")
 
 logging.basicConfig(level=logging.DEBUG)
+
+
+# Check if credentials are set
+GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "config/secrets/gcs.json")
+if not os.path.exists(GOOGLE_CREDENTIALS_PATH):
+    raise FileNotFoundError(f"Google credentials not found at {GOOGLE_CREDENTIALS_PATH}")
+
+# Initialize clients
+speech_client = speech.SpeechClient()
+storage_client = storage.Client()
 
 
 def split_text_at_sentences(text):
@@ -306,3 +318,48 @@ def split_diarized_text(speaker_lines, model="gpt-3.5-turbo", max_tokens=1000):
         chunks.append("\n".join(current_chunk))
 
     return chunks
+
+
+def transcribe_audio(gcs_uri, language_code="en-US", diarization=True):
+    """Transcribes audio from GCS with speaker diarization."""
+    config = speech.RecognitionConfig(
+        encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+        sample_rate_hertz=16000,
+        language_code=language_code,
+        enable_automatic_punctuation=True,
+        enable_speaker_diarization=diarization,
+        diarization_speaker_count=2  # Adjust based on expected speakers
+    )
+
+    audio = speech.RecognitionAudio(uri=gcs_uri)
+
+    # Long-running recognition for large files
+    operation = speech_client.long_running_recognize(config=config, audio=audio)
+    print("Waiting for transcription to complete...")
+
+    while not operation.done():
+        print("Transcription in progress...")
+        time.sleep(5)
+
+    response = operation.result()
+    result_text = ""
+
+    for result in response.results:
+        for alt in result.alternatives:
+            result_text += f"{alt.transcript}\n"
+
+    return result_text
+
+def upload_to_gcs(file_path, bucket_name, destination_blob_name):
+    """Uploads a file to Google Cloud Storage."""
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(destination_blob_name)
+    blob.upload_from_filename(file_path)
+    return f"gs://{bucket_name}/{destination_blob_name}"
+
+def delete_from_gcs(gcs_uri):
+    """Deletes a file from Google Cloud Storage."""
+    bucket_name, blob_name = gcs_uri.split("/blob/")[-2:]
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+    blob.delete()

@@ -5,7 +5,7 @@ import logging
 import sys
 from openpyxl import Workbook
 import pandas as pd
-from process_audio import perform_sentiment_analysis, convert_to_wav, split_diarized_text, transcribe_audio_assemblyai # Ensure this uses the updated process_audio.py
+from process_audio import delete_from_gcs, perform_sentiment_analysis, convert_to_wav, process_file, split_diarized_text, transcribe_audio, transcribe_audio_assemblyai, upload_to_gcs # Ensure this uses the updated process_audio.py
 from functools import wraps
 from dotenv import load_dotenv
 import io
@@ -219,9 +219,11 @@ def transcribe_and_translate():
         # Extract sentiment
         sentiments = response.results.sentiments if hasattr(response.results, 'sentiments') else None
         chunks = split_diarized_text(formatted_transcript, model="gpt-3.5-turbo", max_tokens=1000)
+        delimiter = "\n"
         return jsonify({
             "transcript": transcript, 
-            "formatted_transcript": formatted_transcript, 
+            "formatted_transcript_array": formatted_transcript, 
+            "formatted_transcript": delimiter.join(formatted_transcript),
             "confidence_scores": confidence_scores, 
             "timestamps": timestamps, 
             "paragraphs": paragraphs, 
@@ -303,6 +305,41 @@ def process_audio_to_file():
             for file in os.listdir(temp_dir):
                 os.remove(os.path.join(temp_dir, file))
 
+
+@app.route("/transcribe-google", methods=["POST"])
+def transcribe_endpoint():
+    """API endpoint to transcribe an audio file."""
+    try:
+        file = request.files.get("file")
+        gcs_uri = request.form.get("gcs_uri")  # Optional GCS URI
+        language_code = request.form.get("language", "en-US")
+
+        if not file and not gcs_uri:
+            return jsonify({"error": "No file or GCS URI provided"}), 400
+
+        if file:
+            # Save the file temporarily
+            temp_path = f"/tmp/{file.filename}"
+            file.save(temp_path)
+
+            # Upload to GCS
+            bucket_name = "your-gcs-bucket"  # Replace with your actual bucket
+            gcs_uri = upload_to_gcs(temp_path, bucket_name, file.filename)
+
+        # Perform transcription
+        transcription = transcribe_audio(gcs_uri, language_code)
+        return jsonify({"transcription": transcription})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+    finally:
+        # Clean up temporary files
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+            #delete from bucket
+            delete_from_gcs(gcs_uri)
+    
 @app.route("/text-to-file", methods=["POST"])
 @require_api_key
 def text_to_file():
@@ -351,15 +388,19 @@ def translate_text():
 
         # Get JSON payload from request
         data = request.get_json()
-        
-        if not data or 'text' not in data or 'target_language' not in data:
+
+        # Check if the request is valid
+        #Check JSON validity
+        if not data or not is_valid_json(request.data.decode('utf-8')):
+            return jsonify({'error': 'Invalid JSON format'}), 400
+        if 'text' not in data or 'target_language' not in data:
             return jsonify({'error': 'Missing text or target_language in request'}), 400
         
         text = data['text']
         logging.debug(f"Text: {text}")
         target_language = data['target_language']
         logging.debug(f"Target language: {target_language}")
-        
+
         # Ensure text is a list (Google API expects a list)
         if not isinstance(text, list):
             text = [text]
