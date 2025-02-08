@@ -68,6 +68,7 @@ def transcribe_and_translate():
         logging.info("Received request to transcribe and translate audio")
         
         audio_file = request.files.get("audio")
+        translate = request.form.get("translate", False)
         language = request.form.get("language", "en")
         target_language = request.form.get("target_language", "en")
 
@@ -77,8 +78,9 @@ def transcribe_and_translate():
         # Process and transcribe audio
         formatted_transcript = process_audio_file(audio_file, language)
 
-        # Send transcript for translation
-        translated_text = translate_text(formatted_transcript, target_language)
+        if translate:
+            # Send transcript for translation
+            translated_text = translate_text(formatted_transcript, target_language)
 
         # Return JSON response
         return jsonify({
