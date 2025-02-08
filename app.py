@@ -150,30 +150,40 @@ def transcribe_endpoint():
             #delete from bucket
             delete_from_gcs(gcs_uri)
     
+
 @app.route("/text-to-file", methods=["POST"])
-@require_api_key
 def text_to_file():
     """
     API endpoint to create a text file from input text.
     """
     logging.debug("Received request to create text file")
     
-    # Get JSON data from request
-    data = request.get_json()
-    if not data or 'text' not in data:
-        logging.error("No text provided")
-        return jsonify({"error": "No text provided"}), 400
-    if not data or 'fileName' not in data:
-        logging.error("No fileName provided")
-        return jsonify({"error": "No fileName provided"}), 400
     try:
-        text = data['text']
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = data['fileName'] + f"_{timestamp}.txt"
+        # Get JSON data from request safely
+        data = request.get_data(as_text=True)
+        logging.debug(f"Raw request data: {data}")
+
+        try:
+            parsed_data = json.loads(data)  # Handle cases where raw text may cause issues
+        except json.JSONDecodeError as e:
+            logging.error(f"JSON parsing error: {e}")
+            return jsonify({"error": "Invalid JSON format"}), 400
+
+        # Validate required fields
+        if 'text' not in parsed_data or not parsed_data['text']:
+            logging.error("No text provided")
+            return jsonify({"error": "No text provided"}), 400
         
+        if 'fileName' not in parsed_data or not parsed_data['fileName']:
+            logging.error("No fileName provided")
+            return jsonify({"error": "No fileName provided"}), 400
+
+        text = parsed_data['text']
+        filename = f"{parsed_data['fileName']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+
         # Create file-like object in memory
         file_obj = io.BytesIO()
-        file_obj.write(text.encode('utf-8'))
+        file_obj.write(text.encode('utf-8'))  # Ensure proper UTF-8 encoding
         file_obj.seek(0)
 
         # Return the file
@@ -188,7 +198,6 @@ def text_to_file():
         logging.error(f"Error creating text file: {e}")
         return jsonify({"error": str(e)}), 500
     
-
 @app.route('/sentiment-analysis', methods=['POST'])
 @require_api_key
 def sentiment_analysis():
