@@ -5,12 +5,11 @@ import logging
 import sys
 from openpyxl import Workbook
 import pandas as pd
-from process_audio import delete_from_gcs, perform_sentiment_analysis, convert_to_wav, process_file, split_diarized_text, transcribe_audio, transcribe_audio_assemblyai, upload_to_gcs # Ensure this uses the updated process_audio.py
+from process_audio import delete_from_gcs, perform_sentiment_analysis, process_audio_file, transcribe_audio, translate_text, upload_to_gcs # Ensure this uses the updated process_audio.py
 from functools import wraps
 from dotenv import load_dotenv
 import io
 from datetime import datetime
-from google.cloud import translate_v2 as translate
 
 
 from sentiment_analysis import process_sentiment_analysis_results
@@ -31,24 +30,14 @@ if not os.path.exists(GOOGLE_CREDENTIALS_PATH):
 
 print(f"Google Cloud credentials found at {GOOGLE_CREDENTIALS_PATH}")
 
-
-from deepgram import (
-    DeepgramClient,
-    PrerecordedOptions,
-    FileSource,
-)
 app = Flask(__name__)
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 API_KEY = os.getenv('API_KEY')
-DEEPGRAM_API_KEY = os.getenv('DEEPGRAM_API_KEY')
 if not API_KEY:
     raise ValueError("API_KEY must be set in .env file")
-
-# Define the maximum allowed file size (100 MB)
-MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB in bytes
 
 def is_valid_json(json_string):
     try:
@@ -71,240 +60,61 @@ def require_api_key(f):
 @app.route("/", methods=["GET"])
 def home():
     return jsonify({"message": "Hello, World!"})
-           
-@app.route("/process", methods=["POST"])
-@require_api_key
-def process_audio():
-    """
-    API endpoint to process and transcribe audio files using OpenAI Whisper.
-    """
-    logging.debug("Received request to process audio")
-
-    if "audio" not in request.files:
-        logging.error("No file uploaded")
-        return jsonify({"error": "No file uploaded"}), 400
-
-    double_model = request.form.get("double_model")
-    language = request.form.get("language", "en")
-    sentiment_analysis = request.form.get("sentiment_analysis", False)
-    best_model = request.form.get("best_model", False)
-    if sentiment_analysis == "true":
-        sentiment_analysis = True
-    else:
-        sentiment_analysis = False
-    if double_model:
-        double_model = True
-    else:
-        double_model = False
-
-    audio_file = request.files["audio"]
-    input_path = os.path.join("/tmp", audio_file.filename)
-    wav_path = os.path.join("/tmp", f"{os.path.splitext(audio_file.filename)[0]}.wav")
-
-    try:
-        # Save the uploaded file
-        logging.debug(f"Saving uploaded file to {input_path}")
-        audio_file.save(input_path)
-
-        # Convert to WAV if not already a WAV file
-        if not input_path.lower().endswith(".wav"):
-            logging.debug(f"Converting {input_path} to WAV format")
-            convert_to_wav(input_path, wav_path)
-        else:
-            wav_path = input_path  # If already a WAV file, use as is
-            logging.debug(f"Using existing WAV file: {wav_path}")
-            
-        logging.debug(f"Transcripting WAV file whith assemblyai: {wav_path}")
-        assemblyai_transcription = transcribe_audio_assemblyai(wav_path, best_model)
-        logging.debug(f"AssemblyAI transcription: {assemblyai_transcription}")
-        if double_model:
-            # Process the WAV file using OpenAI Whisper API
-            logging.debug(f"Transcripting WAV file whith whisper: {wav_path}")
-            whisper_transcription = process_file(wav_path, "/tmp/temp", language)  # Ensure this uses the updated process_file
-
-            # Check if transcription is valid
-            if not whisper_transcription or not isinstance(whisper_transcription, str):
-                logging.error("Transcription failed or returned invalid data")
-                return jsonify({"error": "Transcription failed or returned invalid data"}), 500
-            logging.debug(f"Whisper transcription: {whisper_transcription}")
-
-
-        # Clean up uploaded and converted files
-        if input_path != wav_path:  # Only delete input if converted
-            logging.debug(f"Removing uploaded file: {input_path}")
-            os.remove(input_path)
-        logging.debug(f"Removing WAV file: {wav_path}")
-        os.remove(wav_path)
-
-        logging.info("Processing complete, returning transcription")
-
-        result = {"message": "Processing complete", "model1_transcription": assemblyai_transcription}
-        if double_model:
-            result["model2_transcription"] = whisper_transcription
-        return jsonify(result)
-
-    except Exception as e:
-        logging.error(f"Error processing audio: {e}")
-        return jsonify({"error": str(e)}), 500
-
-    finally:
-        # Clean up temporary files
-        temp_dir = "/tmp/temp"
-        if os.path.exists(temp_dir):
-            logging.debug(f"Cleaning up temporary files in {temp_dir}")
-            for file in os.listdir(temp_dir):
-                os.remove(os.path.join(temp_dir, file))
 
 @app.route('/transcribe_and_translate', methods=['POST'])
-@require_api_key
 def transcribe_and_translate():
+    """Handles audio transcription and translation"""
     try:
-        logging.debug("Received request to transcribe and translate audio")
-        audio_file = request.files['audio']
+        logging.info("Received request to transcribe and translate audio")
+        
+        audio_file = request.files.get("audio")
         language = request.form.get("language", "en")
-        logging.debug(f"Audio file: {audio_file}")
+        target_language = request.form.get("target_language", "en")
+
         if not audio_file:
             return jsonify({"error": "No file uploaded"}), 400
-        
-        # STEP 1: Create a Deepgram client using the API key
-        deepgram = DeepgramClient(DEEPGRAM_API_KEY)
 
-        buffer_data = audio_file.read()
+        # Process and transcribe audio
+        formatted_transcript = process_audio_file(audio_file, language)
 
-        payload: FileSource = {
-            "buffer": buffer_data,
-        }
+        # Send transcript for translation
+        translated_text = translate_text(formatted_transcript, target_language)
 
-        options = PrerecordedOptions(
-            model="nova-2",
-            smart_format=True,
-            language=language,
-            diarize=True,
-            dictation=True,
-            filler_words=True,
-            utterances=True,
-            detect_entities=True,
-            sentiment=True
-        )
-
-        response = deepgram.listen.prerecorded.v("1").transcribe_file(payload, options, timeout=240)
-
-        # Extract transcription and other data
-        result = response.results.channels[0].alternatives[0]
-        transcript = result.transcript
-        
-        # Format transcript with speaker diarization
-        formatted_transcript = []
-        current_speaker = None
-        current_text = ""
-
-        for word in result.words:
-            if word.speaker != current_speaker:
-                if current_speaker is not None:
-                    formatted_transcript.append(f"Speaker {current_speaker}: {current_text.strip()}")
-                current_speaker = word.speaker
-                current_text = ""
-            current_text += word.punctuated_word + " "
-
-        if current_text:
-            formatted_transcript.append(f"Speaker {current_speaker}: {current_text.strip()}")
-
-        # Extract other data
-        confidence_scores = [word.confidence for word in result.words]
-        timestamps = [(word.word, word.start, word.end) for word in result.words]
-        paragraphs = result.paragraphs
-        metadata = response.metadata
-        entities = result.entities if hasattr(result, 'entities') else []
-        
-        # Extract sentiment
-        sentiments = response.results.sentiments if hasattr(response.results, 'sentiments') else None
-        chunks = split_diarized_text(formatted_transcript, model="gpt-3.5-turbo", max_tokens=1000)
-        delimiter = "\n"
+        # Return JSON response
         return jsonify({
-            "transcript": transcript, 
-            "formatted_transcript_array": formatted_transcript, 
-            "formatted_transcript": delimiter.join(formatted_transcript),
-            "confidence_scores": confidence_scores, 
-            "timestamps": timestamps, 
-            "paragraphs": paragraphs, 
-            "metadata": metadata, 
-            "entities": entities,
-            "sentiments": sentiments,
-            "chunks": chunks
+            "formatted_transcript": "\n".join(formatted_transcript),
+            "translated_text": translated_text
         })
 
     except Exception as e:
         logging.error(f"Error in transcribe_and_translate: {str(e)}")
         return jsonify({"error": str(e)}), 500
-    
-@app.route("/process-to-file", methods=["POST"])
-@require_api_key
-def process_audio_to_file():
-    """
-    API endpoint to process audio and return the transcription as a text file.
-    """
-    logging.debug("Received request to process audio to file")
-    
-    if "audio" not in request.files:
-        logging.error("No file uploaded")
-        return jsonify({"error": "No file uploaded"}), 400
-    best_model = request.json.get("best_model", False)
-    audio_file = request.files["audio"]
-    input_path = os.path.join("/tmp", audio_file.filename)
-    wav_path = os.path.join("/tmp", f"{os.path.splitext(audio_file.filename)[0]}.wav")
 
+@app.route('/translate', methods=['POST'])
+def translate_text_endpoint():
+    """Translates text to the target language"""
     try:
-        # Save the uploaded file
-        audio_file.save(input_path)
-        logging.debug(f"Saved uploaded file to {input_path}")
+        logging.info("Received request to translate text")
 
-        # Convert to WAV if needed
-        if not input_path.lower().endswith(".wav"):
-            convert_to_wav(input_path, wav_path)
-        else:
-            wav_path = input_path
-        logging.debug(f"Converted to WAV: {wav_path}")
+        data = request.get_json()
+        if not data or "text" not in data or "target_language" not in data:
+            return jsonify({'error': 'Missing text or target_language in request'}), 400
+        
+        text = data['text']
+        target_language = data['target_language'] or "en"
 
-        # Process the WAV file
-        transcription = transcribe_audio_assemblyai(wav_path, best_model)
-        logging.debug(f"Processed file: {transcription}")
+        # Ensure text is a list
+        if not isinstance(text, list):
+            text = [text]
 
-        # Create text file in memory
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"transcription_{timestamp}.txt"
-        logging.debug(f"Creating file: {filename}")
-
-        # Create file-like object in memory
-        file_obj = io.BytesIO()
-        file_obj.write(transcription.encode('utf-8'))
-        file_obj.seek(0)
-        logging.debug(f"File created: {file_obj}")
-
-        # Clean up
-        if input_path != wav_path:
-            os.remove(input_path)
-        os.remove(wav_path)
-        logging.debug(f"Files removed: {input_path}, {wav_path}")
-
-        # Return the file
-        return send_file(
-            file_obj,
-            mimetype='text/plain',
-            as_attachment=True,
-            download_name=filename
-        )
+        translated_text_response = translate_text(text, target_language)
+        translated_text = translated_text_response["joined_translated_text"]
+        translated_text_list = translated_text_response["translated_text_list"]
+        return jsonify({'translated_text': translated_text, 'translated_text_list': translated_text_list})
 
     except Exception as e:
-        logging.error(f"Error processing audio to file: {e}")
-        return jsonify({"error": str(e)}), 500
-
-    finally:
-        # Clean up temporary files
-        temp_dir = "/tmp/temp"
-        if os.path.exists(temp_dir):
-            for file in os.listdir(temp_dir):
-                os.remove(os.path.join(temp_dir, file))
-
+        logging.error(f"Error in translate_text: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route("/transcribe-google", methods=["POST"])
 def transcribe_endpoint():
@@ -378,46 +188,6 @@ def text_to_file():
         logging.error(f"Error creating text file: {e}")
         return jsonify({"error": str(e)}), 500
     
-
-@app.route('/translate', methods=['POST'])
-@require_api_key
-def translate_text():
-    try:
-        translate_client = translate.Client()
-
-
-        # Get JSON payload from request
-        data = request.get_json()
-
-        # Check if the request is valid
-        #Check JSON validity
-        if not data or not is_valid_json(request.data.decode('utf-8')):
-            return jsonify({'error': 'Invalid JSON format'}), 400
-        if 'text' not in data or 'target_language' not in data:
-            return jsonify({'error': 'Missing text or target_language in request'}), 400
-        
-        text = data['text']
-        logging.debug(f"Text: {text}")
-        target_language = data['target_language']
-        logging.debug(f"Target language: {target_language}")
-
-        # Ensure text is a list (Google API expects a list)
-        if not isinstance(text, list):
-            text = [text]
-
-        # Call Google Translate API
-        response = translate_client.translate(
-            text,
-            target_language=target_language
-        )
-
-        # Extract translation results
-        translations = [res['translatedText'] for res in response]
-
-        return jsonify({'translated_text': translations}), 200
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/sentiment-analysis', methods=['POST'])
 @require_api_key

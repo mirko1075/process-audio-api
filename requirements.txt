@@ -5,8 +5,8 @@ aiohttp==3.11.11
 aiosignal==1.3.2
 annotated-types==0.7.0
 anyio==4.8.0
-assemblyai==0.36.0
 attrs==24.3.0
+beautifulsoup4==4.13.3
 blinker==1.9.0
 boto3==1.36.14
 botocore==1.36.14
@@ -74,7 +74,6 @@ nvidia-cusparse-cu12==12.3.1.170
 nvidia-nccl-cu12==2.21.5
 nvidia-nvjitlink-cu12==12.4.127
 nvidia-nvtx-cu12==12.4.127
-openai==1.60.1
 openai-whisper @ git+https://github.com/openai/whisper.git@517a43ecd132a2089d85f4ebc044728a71d49f6e
 openpyxl==3.1.5
 packaging==24.2
@@ -99,6 +98,7 @@ safetensors==0.5.2
 setuptools==75.8.0
 six==1.17.0
 sniffio==1.3.1
+soupsieve==2.6
 sympy==1.13.1
 tiktoken==0.8.0
 tokenizers==0.21.0
@@ -110,9 +110,9 @@ typing-inspect==0.9.0
 typing_extensions==4.12.2
 tzdata==2025.1
 urllib3==2.3.0
+utils==1.0.2
 watchdog==6.0.0
 websockets==14.2
 Werkzeug==3.1.3
-whisper==1.1.10
 xxhash==3.5.0
 yarl==1.18.3
