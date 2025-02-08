@@ -163,23 +163,19 @@ def text_to_file():
         data = request.get_data(as_text=True)
         logging.debug(f"Raw request data: {data}")
 
-        try:
-            parsed_data = json.loads(data)  # Handle cases where raw text may cause issues
-        except json.JSONDecodeError as e:
-            logging.error(f"JSON parsing error: {e}")
-            return jsonify({"error": "Invalid JSON format"}), 400
+        text = request.form.get("text") or request.json.get("text")
+        fileName = request.form.get("fileName") or request.json.get("fileName")
 
         # Validate required fields
-        if 'text' not in parsed_data or not parsed_data['text']:
+        if not text:
             logging.error("No text provided")
             return jsonify({"error": "No text provided"}), 400
         
-        if 'fileName' not in parsed_data or not parsed_data['fileName']:
+        if not fileName:
             logging.error("No fileName provided")
             return jsonify({"error": "No fileName provided"}), 400
 
-        text = parsed_data['text']
-        filename = f"{parsed_data['fileName']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        filename = f"{fileName}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
 
         # Create file-like object in memory
         file_obj = io.BytesIO()
