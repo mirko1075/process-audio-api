@@ -10,7 +10,8 @@ from functools import wraps
 from dotenv import load_dotenv
 import io
 from datetime import datetime
-import boto3
+from google.cloud import translate_v2 as translate
+
 
 from sentiment_analysis import process_sentiment_analysis_results
 
@@ -326,14 +327,40 @@ def text_to_file():
         logging.error(f"Error creating text file: {e}")
         return jsonify({"error": str(e)}), 500
     
+
 @app.route('/translate', methods=['POST'])
-def translate():
-    """
-    API endpoint to process audio and return the translation as a text file.
-    """
-    translate = boto3.client('translate')
-    response = translate.list_languages(DisplayLanguageCode='en')  # Returns language codes/names in English
-    print(response['Languages'])
+@require_api_key
+def translate_text():
+    try:
+        translate_client = translate.Client()
+
+
+        # Get JSON payload from request
+        data = request.get_json()
+        
+        if not data or 'text' not in data or 'target_language' not in data:
+            return jsonify({'error': 'Missing text or target_language in request'}), 400
+        
+        text = data['text']
+        target_language = data['target_language']
+
+        # Ensure text is a list (Google API expects a list)
+        if not isinstance(text, list):
+            text = [text]
+
+        # Call Google Translate API
+        response = translate_client.translate(
+            text,
+            target_language=target_language
+        )
+
+        # Extract translation results
+        translations = [res['translatedText'] for res in response]
+
+        return jsonify({'translated_text': translations}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/sentiment-analysis', methods=['POST'])
 @require_api_key
