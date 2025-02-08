@@ -2,7 +2,7 @@ import json
 from flask import Flask, request, jsonify, send_file
 import os
 import logging
-import deepgram
+import sys
 from openpyxl import Workbook
 import pandas as pd
 from process_audio import perform_sentiment_analysis, convert_to_wav, split_diarized_text, transcribe_audio_assemblyai # Ensure this uses the updated process_audio.py
@@ -17,6 +17,20 @@ from sentiment_analysis import process_sentiment_analysis_results
 
 # Load environment variables
 load_dotenv()
+
+# Check for Google Cloud credentials at startup
+GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+
+if not GOOGLE_CREDENTIALS_PATH:
+    print("ERROR: GOOGLE_APPLICATION_CREDENTIALS environment variable is not set.")
+    sys.exit(1)  # Exit if credentials are not set
+
+if not os.path.exists(GOOGLE_CREDENTIALS_PATH):
+    print(f"ERROR: Credentials file not found at {GOOGLE_CREDENTIALS_PATH}")
+    sys.exit(1)  # Exit if file does not exist
+
+print(f"Google Cloud credentials found at {GOOGLE_CREDENTIALS_PATH}")
+
 
 from deepgram import (
     DeepgramClient,
