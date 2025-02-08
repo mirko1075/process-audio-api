@@ -5,11 +5,12 @@ import logging
 import deepgram
 from openpyxl import Workbook
 import pandas as pd
-from process_audio import perform_sentiment_analysis, convert_to_wav, transcribe_audio_assemblyai # Ensure this uses the updated process_audio.py
+from process_audio import perform_sentiment_analysis, convert_to_wav, split_diarized_text, transcribe_audio_assemblyai # Ensure this uses the updated process_audio.py
 from functools import wraps
 from dotenv import load_dotenv
 import io
 from datetime import datetime
+import boto3
 
 from sentiment_analysis import process_sentiment_analysis_results
 
@@ -202,7 +203,7 @@ def transcribe_and_translate():
         
         # Extract sentiment
         sentiments = response.results.sentiments if hasattr(response.results, 'sentiments') else None
-
+        chunks = split_diarized_text(formatted_transcript, model="gpt-3.5-turbo", max_tokens=1000)
         return jsonify({
             "transcript": transcript, 
             "formatted_transcript": formatted_transcript, 
@@ -211,7 +212,8 @@ def transcribe_and_translate():
             "paragraphs": paragraphs, 
             "metadata": metadata, 
             "entities": entities,
-            "sentiments": sentiments
+            "sentiments": sentiments,
+            "chunks": chunks
         })
 
     except Exception as e:
@@ -325,12 +327,13 @@ def text_to_file():
         return jsonify({"error": str(e)}), 500
     
 @app.route('/translate', methods=['POST'])
-@require_api_key
 def translate():
     """
     API endpoint to process audio and return the translation as a text file.
     """
-    pass
+    translate = boto3.client('translate')
+    response = translate.list_languages(DisplayLanguageCode='en')  # Returns language codes/names in English
+    print(response['Languages'])
 
 @app.route('/sentiment-analysis', methods=['POST'])
 @require_api_key

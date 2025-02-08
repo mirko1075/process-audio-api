@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 import assemblyai as aai
 from transformers import pipeline
 import re
+import tiktoken
 load_dotenv()
 
 # Constants
@@ -263,3 +264,45 @@ def perform_sentiment_analysis(text=None, best_model=False):
     except Exception as e:
         return {"error": str(e)}
 
+
+def split_diarized_text(speaker_lines, model="gpt-3.5-turbo", max_tokens=1000):
+    """Splits a diarized transcript (list format) into chunks without cutting a speaker's sentence"""
+    
+    if not isinstance(speaker_lines, list):  # Ensure the input is a list
+        raise ValueError(f"Expected a list of strings, but got {type(speaker_lines)}")
+
+    logging.debug(f"Splitting text into chunks with model: {model} and max tokens: {max_tokens}")
+    
+    enc = tiktoken.encoding_for_model(model)
+
+    # Join the list into a single text block with newline separation
+    text = "\n".join(speaker_lines)
+
+    tokens = enc.encode(text)  # Tokenize the entire text
+    logging.debug(f"Total tokens: {len(tokens)}")
+
+    chunks = []
+    current_chunk = []
+    current_chunk_tokens = 0
+
+    for line in speaker_lines:
+        if not line.strip():  # Skip empty lines
+            continue
+
+        line_tokens = len(enc.encode(line))  # Get token count for this line
+        logging.debug(f"Processing line: {line[:30]}... | Tokens: {line_tokens}")
+
+        # If adding this line exceeds the token limit, start a new chunk
+        if current_chunk_tokens + line_tokens > max_tokens:
+            chunks.append("\n".join(current_chunk))  # Save the current chunk
+            current_chunk = [line]  # Start a new chunk with the current line
+            current_chunk_tokens = line_tokens  # Reset token counter
+        else:
+            current_chunk.append(line)
+            current_chunk_tokens += line_tokens
+    
+    # Append the last chunk if not empty
+    if current_chunk:
+        chunks.append("\n".join(current_chunk))
+
+    return chunks
