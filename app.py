@@ -356,8 +356,10 @@ def translate_text():
             return jsonify({'error': 'Missing text or target_language in request'}), 400
         
         text = data['text']
+        logging.debug(f"Text: {text}")
         target_language = data['target_language']
-
+        logging.debug(f"Target language: {target_language}")
+        
         # Ensure text is a list (Google API expects a list)
         if not isinstance(text, list):
             text = [text]
