@@ -256,13 +256,13 @@ def format_transcript(response):
         for word in result.words:
             if word.speaker != current_speaker:
                 if current_speaker is not None:
-                    formatted_transcript.append(f"Speaker {current_speaker}: {current_text.strip()}")
+                    formatted_transcript.append(f"Speaker {current_speaker}: {html.unescape(BeautifulSoup(current_text.strip(), 'html.parser').text)}")
                 current_speaker = word.speaker
                 current_text = ""
             current_text += word.punctuated_word + " "
 
         if current_text:
-            formatted_transcript.append(f"Speaker {current_speaker}: {current_text.strip()}")
+            formatted_transcript.append(f"Speaker {current_speaker}: {html.unescape(BeautifulSoup(current_text.strip(), 'html.parser').text)}")
 
         return formatted_transcript
 
