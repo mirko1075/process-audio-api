@@ -77,7 +77,7 @@ def transcribe_and_translate():
 
         # Process and transcribe audio
         formatted_transcript = process_audio_file(audio_file, language)
-
+        translated_text = None
         if translate:
             # Send transcript for translation
             translated_text = translate_text(formatted_transcript, target_language)
