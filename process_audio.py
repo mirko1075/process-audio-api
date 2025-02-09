@@ -10,9 +10,11 @@ import subprocess
 import logging
 import ffmpeg
 from dotenv import load_dotenv
+import tiktoken
 from transformers import pipeline
 import re
 import time
+import openai
 from google.cloud import speech_v1p1beta1 as speech
 from google.cloud import storage
 from google.cloud import translate_v2 as translate
@@ -21,6 +23,7 @@ from bs4 import BeautifulSoup  # This works with beautifulsoup4
 
 load_dotenv()
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 # Constants
 MAX_CHUNK_SIZE_MB = 20  # Max file size in MB before we chunk
 OVERLAP_SECONDS = 30  # Overlap between chunks (in seconds)
@@ -38,6 +41,7 @@ if not os.path.exists(GOOGLE_CREDENTIALS_PATH):
 # Initialize clients
 speech_client = speech.SpeechClient()
 storage_client = storage.Client()
+client = openai.OpenAI(api_key=OPENAI_API_KEY)  # ✅ Correct OpenAI Client initialization
 
 
 def split_text_at_sentences(text):
@@ -100,7 +104,7 @@ def split_audio(input_file, output_dir, chunk_duration=CHUNK_DURATION_SECONDS, o
         logging.error(f"Error splitting audio: {e}")
         raise
 
-def transcribe_audio(audio_file, language):
+def transcribe_audio_openai(audio_file, language):
     """
     Transcribes an audio file using OpenAI's Whisper API.
     """
@@ -170,7 +174,7 @@ def perform_sentiment_analysis(text=None, best_model=False):
     except Exception as e:
         return {"error": str(e)}
 
-def transcribe_audio(gcs_uri, language_code="en-US", diarization=True):
+def transcribe_audio_with_google_diarization(gcs_uri, language_code="en-US", diarization=True):
     """Transcribes audio from GCS with speaker diarization."""
     config = speech.RecognitionConfig(
         encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
@@ -214,7 +218,7 @@ def delete_from_gcs(gcs_uri):
     blob = bucket.blob(blob_name)
     blob.delete()
 
-def translate_text(text_list, target_language):
+def translate_text_google(text_list, target_language):
     """
     Translates text using Google Translate API in batches of max 128 segments.
     """
@@ -251,22 +255,25 @@ def format_transcript(response):
     """Formats the transcript with speaker diarization"""
     try:
         result = response.results.channels[0].alternatives[0]
-        formatted_transcript = []
+        formatted_transcript_array = []
         current_speaker = None
         current_text = ""
-
+            
         for word in result.words:
             if word.speaker != current_speaker:
                 if current_speaker is not None:
-                    formatted_transcript.append(f"Speaker {current_speaker}: {html.unescape(BeautifulSoup(current_text.strip(), 'html.parser').text)}")
+                    formatted_transcript_array.append(f"Speaker {current_speaker}: {html.unescape(BeautifulSoup(current_text.strip(), 'html.parser').text)}")
                 current_speaker = word.speaker
                 current_text = ""
             current_text += word.punctuated_word + " "
 
         if current_text:
-            formatted_transcript.append(f"Speaker {current_speaker}: {html.unescape(BeautifulSoup(current_text.strip(), 'html.parser').text)}")
-
-        return formatted_transcript
+            formatted_transcript_array.append(f"Speaker {current_speaker}: {html.unescape(BeautifulSoup(current_text.strip(), 'html.parser').text)}")
+        print(f"TYPE OF FORMATTED TRANSCRIPT: {type(formatted_transcript_array)}")
+        return {
+            "formatted_transcript_array": formatted_transcript_array,
+            "transcript": response.results.channels[0].alternatives[0].paragraphs.transcript
+        }
 
     except Exception as e:
         logging.error(f"Error formatting transcript: {e}")
@@ -290,14 +297,147 @@ def process_audio_file(audio_file, language="en"):
             dictation=True,
             filler_words=True,
             utterances=True,
-            detect_entities=True,
-            sentiment=True
         )
 
         response = deepgram.listen.prerecorded.v("1").transcribe_file(payload, options, timeout=240)
-
         return format_transcript(response)
 
     except Exception as e:
         logging.error(f"Error processing audio: {e}")
+        raise
+
+
+# Tokenizer for chunking large texts
+def split_text_into_chunks(text, model="gpt-4-turbo", max_tokens=1000):
+    """Splits text into chunks without cutting sentences."""
+    enc = tiktoken.encoding_for_model(model)
+    words = text.split("\n")  # Splitting by lines
+    chunks = []
+    current_chunk = []
+    current_chunk_tokens = 0
+
+    for line in words:
+        line_tokens = len(enc.encode(line))  # Get token count for this line
+        if current_chunk_tokens + line_tokens > max_tokens:
+            chunks.append("\n".join(current_chunk))  # Save the current chunk
+            current_chunk = [line]  # Start a new chunk
+            current_chunk_tokens = line_tokens
+        else:
+            current_chunk.append(line)
+            current_chunk_tokens += line_tokens
+    
+    # Append the last chunk
+    if current_chunk:
+        chunks.append("\n".join(current_chunk))
+
+    return chunks
+
+
+def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
+    """Translates text using OpenAI GPT-4 with the most accurate possible output."""
+    try:
+        logging.info(f"Translating from {source_lang} to {target_lang} using OpenAI GPT-4 Turbo")
+
+        # Split text into chunks to avoid token limits
+        text_chunks = split_text_into_chunks(text)
+        translated_chunks = []
+
+        for chunk in text_chunks:
+            prompt = f"""You are an expert translator. Translate the following text from {source_lang} to {target_lang}. 
+            Ensure perfect accuracy, preserving meaning and idioms.
+            
+            Text:
+            {chunk}
+
+            Translated Text:
+            """
+            response = client.chat.completions.create(
+                model="gpt-4-turbo",
+                messages=[{"role": "system", "content": prompt}],
+                temperature=0.1
+            )
+            translated_text = response.choices[0].message.content.strip()
+            translated_chunks.append(translated_text)
+
+        return "\n".join(translated_chunks)  # Join chunks together
+
+    except Exception as e:
+        logging.error(f"Error during translation: {e}")
+        raise
+
+def convert_to_wav(input_path, output_path):
+    """
+    Converts an audio file to WAV format using FFmpeg.
+    """
+    try:
+        logging.debug(f"Converting {input_path} to WAV format")
+        cmd = [
+            "ffmpeg", "-i", input_path,
+            "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1",
+            "-y",
+            output_path
+        ]
+        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        logging.debug(f"File converted to WAV: {output_path}")
+    except subprocess.CalledProcessError as e:
+        print(f"FFmpeg error: {e.stderr.decode()}")
+        raise RuntimeError(f"Failed to convert file to WAV: {e.stderr.decode()}")
+
+
+def transcribe_audio(audio_file, language):
+    """
+    Transcribes an audio file using OpenAI's Whisper API.
+    """
+    try:
+        # Set your OpenAI API key
+
+        # Open the audio file in binary mode
+        with open(audio_file, "rb") as file:
+            response = openai.audio.transcriptions.create(
+                model="whisper-1",
+                file=file,
+                temperature=0.0,
+                language=language
+            )
+        return response.text
+    except Exception as e:
+        logging.error(f"Error transcribing {audio_file}: {e}")
+        raise
+
+def process_file(file_path, temp_dir, language):
+    """
+    Processes a single audio file: splits if necessary, transcribes, and combines results.
+    """
+    try:
+        logging.debug(f"Starting to process file: {file_path}")
+
+        file_size = os.path.getsize(file_path)
+        duration = get_duration(file_path)
+        logging.debug(f"File size: {file_size / (1024 * 1024):.2f} MB")
+        logging.debug(f"Duration: {duration / 60:.2f} minutes")
+
+        if file_size <= MAX_CHUNK_SIZE_MB * 1024 * 1024:
+            logging.info("File under size limit - processing as single file")
+
+            text = transcribe_audio(file_path, language)  # Use the Whisper API
+            logging.debug(f"Transcription result: {text}")
+            return text
+        else:
+            logging.info(f"File over {MAX_CHUNK_SIZE_MB}MB - splitting into chunks")
+            chunk_files = split_audio(file_path, temp_dir)
+            logging.debug(f"Split into {len(chunk_files)} chunks")
+
+            combined_texts = []
+            for i, chunk in enumerate(chunk_files, 1):
+                logging.debug(f"Processing chunk {i}/{len(chunk_files)}: {chunk}")
+                text = transcribe_audio(chunk, language)  # Use the Whisper API
+                combined_texts.append(text)
+                os.remove(chunk)
+                logging.info(f"Chunk {i} processed and removed")
+
+            logging.debug(f"Combined transcription results: {combined_texts}")
+            return "\n".join(combined_texts)
+
+    except Exception as e:
+        logging.error(f"Error processing file: {file_path}, {e}")
         raise

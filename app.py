@@ -5,7 +5,7 @@ import logging
 import sys
 from openpyxl import Workbook
 import pandas as pd
-from process_audio import delete_from_gcs, perform_sentiment_analysis, process_audio_file, transcribe_audio, translate_text, upload_to_gcs # Ensure this uses the updated process_audio.py
+from process_audio import convert_to_wav, delete_from_gcs, perform_sentiment_analysis, process_audio_file, process_file, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
 from functools import wraps
 from dotenv import load_dotenv
 import io
@@ -61,6 +61,7 @@ def require_api_key(f):
 def home():
     return jsonify({"message": "Hello, World!"})
 
+
 @app.route('/transcribe_and_translate', methods=['POST'])
 def transcribe_and_translate():
     """Handles audio transcription and translation"""
@@ -69,6 +70,11 @@ def transcribe_and_translate():
         
         audio_file = request.files.get("audio")
         translate = request.form.get("translate", False)
+        translation_model = request.form.get("translation_model", "google")
+        #accept google or openai
+        if translate and translation_model not in ["google", "openai"]:
+            return jsonify({"error": "Invalid translation model"}), 400
+
         language = request.form.get("language", "en")
         target_language = request.form.get("target_language", "en")
 
@@ -76,15 +82,18 @@ def transcribe_and_translate():
             return jsonify({"error": "No file uploaded"}), 400
 
         # Process and transcribe audio
-        formatted_transcript = process_audio_file(audio_file, language)
+        transcription_response = process_audio_file(audio_file, language)
+        print(f"TRANSCRIPTION RESPONSE: {transcription_response}")
+        formatted_transcript_array = transcription_response["formatted_transcript_array"]
+        transcript = transcription_response["transcript"]
         translated_text = None
         if translate:
             # Send transcript for translation
-            translated_text = translate_text(formatted_transcript, target_language)
-
+            translated_text = translate_text_with_openai(transcript, language, target_language)
         # Return JSON response
         return jsonify({
-            "formatted_transcript": "\n".join(formatted_transcript),
+            "formatted_transcript_array": formatted_transcript_array,
+            "transcript": transcript,
             "translated_text": translated_text
         })
 
@@ -92,11 +101,12 @@ def transcribe_and_translate():
         logging.error(f"Error in transcribe_and_translate: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/translate', methods=['POST'])
+@app.route('/translate-with-google', methods=['POST'])
+@require_api_key
 def translate_text_endpoint():
     """Translates text to the target language"""
     try:
-        logging.info("Received request to translate text")
+        logging.info("Received request to translate text with Google")
 
         data = request.get_json()
         if not data or "text" not in data or "target_language" not in data:
@@ -109,13 +119,35 @@ def translate_text_endpoint():
         if not isinstance(text, list):
             text = [text]
 
-        translated_text_response = translate_text(text, target_language)
+        translated_text_response = translate_text_google(text, target_language)
         translated_text = translated_text_response["joined_translated_text"]
         translated_text_list = translated_text_response["translated_text_list"]
         return jsonify({'translated_text': translated_text, 'translated_text_list': translated_text_list})
 
     except Exception as e:
         logging.error(f"Error in translate_text: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/translate-with-openai', methods=['POST'])
+@require_api_key
+def translate_text_with_openai_endpoint():
+    """Translates text to the target language"""
+    try:
+        logging.info("Received request to translate text with OpenAI")
+        text = request.form.get("text")
+        source_language = request.form.get("source_language")
+        target_language = request.form.get("target_language")
+        
+        if not text:
+            return jsonify({'error': 'Missing text in request'}), 400
+        if not source_language:
+            return jsonify({'error': 'Missing source_language in request'}), 400
+        
+
+        translated_text = translate_text_with_openai(text, source_language, target_language)
+        return jsonify({'translated_text': translated_text})
+    except Exception as e:
+        logging.error(f"Error in translate_text_with_openai: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route("/transcribe-google", methods=["POST"])
@@ -139,7 +171,7 @@ def transcribe_endpoint():
             gcs_uri = upload_to_gcs(temp_path, bucket_name, file.filename)
 
         # Perform transcription
-        transcription = transcribe_audio(gcs_uri, language_code)
+        transcription = transcribe_audio_openai(gcs_uri, language_code)
         return jsonify({"transcription": transcription})
 
     except Exception as e:
@@ -151,7 +183,72 @@ def transcribe_endpoint():
             os.remove(temp_path)
             #delete from bucket
             delete_from_gcs(gcs_uri)
-    
+
+           
+@app.route("/transcript-with-whisper", methods=["POST"])
+@require_api_key
+def transcript_with_whisper_endpoint():
+    """
+    API endpoint to process and transcribe audio files using OpenAI Whisper.
+    """
+    logging.debug("Received request to process audio")
+    audio_file = request.files.get("audio")
+    language = request.form.get("language", "en")
+    if not audio_file:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    input_path = os.path.join("/tmp", audio_file.filename)
+    wav_path = os.path.join("/tmp", f"{os.path.splitext(audio_file.filename)[0]}.wav")
+
+    try:
+        # Save the uploaded file
+        logging.debug(f"Saving uploaded file to {input_path}")
+        audio_file.save(input_path)
+
+        # Convert to WAV if not already a WAV file
+        if not input_path.lower().endswith(".wav"):
+            logging.debug(f"Converting {input_path} to WAV format")
+            convert_to_wav(input_path, wav_path)
+        else:
+            wav_path = input_path  # If already a WAV file, use as is
+            logging.debug(f"Using existing WAV file: {wav_path}")
+            
+        # Process the WAV file using OpenAI Whisper API
+        logging.debug(f"Transcripting WAV file whith whisper: {wav_path}")
+        whisper_transcription = process_file(wav_path, "/tmp/temp", language)  # Ensure this uses the updated process_file
+
+        # Check if transcription is valid
+        if not whisper_transcription or not isinstance(whisper_transcription, str):
+            logging.error("Transcription failed or returned invalid data")
+            return jsonify({"error": "Transcription failed or returned invalid data"}), 500
+        logging.debug(f"Whisper transcription: {whisper_transcription}")
+
+
+        # Clean up uploaded and converted files
+        if input_path != wav_path:  # Only delete input if converted
+            logging.debug(f"Removing uploaded file: {input_path}")
+            os.remove(input_path)
+        logging.debug(f"Removing WAV file: {wav_path}")
+        os.remove(wav_path)
+
+        logging.info("Processing complete, returning transcription")
+
+
+        result = {"message": "Processing complete", "transcription": whisper_transcription}
+        return jsonify(result)
+
+    except Exception as e:
+        logging.error(f"Error processing audio: {e}")
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        # Clean up temporary files
+        temp_dir = "/tmp/temp"
+        if os.path.exists(temp_dir):
+            logging.debug(f"Cleaning up temporary files in {temp_dir}")
+            for file in os.listdir(temp_dir):
+                os.remove(os.path.join(temp_dir, file))
+
 
 @app.route("/text-to-file", methods=["POST"])
 def text_to_file():
