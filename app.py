@@ -5,7 +5,7 @@ import logging
 import sys
 from openpyxl import Workbook
 import pandas as pd
-from process_audio import convert_to_wav, delete_from_gcs, perform_sentiment_analysis, process_audio_file, process_file, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
+from process_audio import convert_to_wav, delete_from_gcs, perform_sentiment_analysis, process_audio_file, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
 from functools import wraps
 from dotenv import load_dotenv
 import io
@@ -215,7 +215,7 @@ def transcript_with_whisper_endpoint():
             
         # Process the WAV file using OpenAI Whisper API
         logging.debug(f"Transcripting WAV file whith whisper: {wav_path}")
-        whisper_transcription = process_file(wav_path, "/tmp/temp", language)  # Ensure this uses the updated process_file
+        whisper_transcription = transcript_with_whisper_large_files(wav_path, "/tmp/temp", language)  # Ensure this uses the updated process_file
 
         # Check if transcription is valid
         if not whisper_transcription or not isinstance(whisper_transcription, str):

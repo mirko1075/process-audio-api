@@ -49,7 +49,7 @@ def split_text_at_sentences(text):
     sentences = re.split(r'(?<=[.!?])\s+', text)
     return sentences
 
-def get_duration(input_file):
+def get_audio_duration(input_file):
     cmd = [
         'ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of',
         'default=noprint_wrappers=1:nokey=1', input_file
@@ -72,7 +72,7 @@ def split_audio(input_file, output_dir, chunk_duration=CHUNK_DURATION_SECONDS, o
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
-        total_duration = get_duration(input_file)
+        total_duration = get_audio_duration(input_file)
         start_times = [
             max(0, i * (chunk_duration - overlap))
             for i in range(int(total_duration // chunk_duration) + 1)
@@ -343,21 +343,23 @@ def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
         translated_chunks = []
 
         for chunk in text_chunks:
-            prompt = f"""You are an expert translator. Translate the following text from {source_lang} to {target_lang}. 
-            Ensure perfect accuracy, preserving meaning and idioms.
-            
-            Text:
-            {chunk}
+            print(f"Chunk: {chunk}")
+            if chunk != "":
+                prompt = f"""You are an expert translator. Translate the following text from {source_lang} to {target_lang}. 
+                Ensure perfect accuracy, preserving meaning and idioms.
+                
+                Text:
+                {chunk}
 
-            Translated Text:
-            """
-            response = client.chat.completions.create(
-                model="gpt-4-turbo",
-                messages=[{"role": "system", "content": prompt}],
-                temperature=0.1
-            )
-            translated_text = response.choices[0].message.content.strip()
-            translated_chunks.append(translated_text)
+                Translated Text:
+                """
+                response = client.chat.completions.create(
+                    model="gpt-4-turbo",
+                    messages=[{"role": "system", "content": prompt}],
+                    temperature=0.1
+                )
+                translated_text = response.choices[0].message.content.strip()
+                translated_chunks.append(translated_text)
 
         return "\n".join(translated_chunks)  # Join chunks together
 
@@ -384,7 +386,7 @@ def convert_to_wav(input_path, output_path):
         raise RuntimeError(f"Failed to convert file to WAV: {e.stderr.decode()}")
 
 
-def transcribe_audio(audio_file, language):
+def transcribe_audio_with_whisper(audio_file, language):
     """
     Transcribes an audio file using OpenAI's Whisper API.
     """
@@ -404,7 +406,7 @@ def transcribe_audio(audio_file, language):
         logging.error(f"Error transcribing {audio_file}: {e}")
         raise
 
-def process_file(file_path, temp_dir, language):
+def transcript_with_whisper_large_files(file_path, temp_dir, language):
     """
     Processes a single audio file: splits if necessary, transcribes, and combines results.
     """
@@ -412,14 +414,14 @@ def process_file(file_path, temp_dir, language):
         logging.debug(f"Starting to process file: {file_path}")
 
         file_size = os.path.getsize(file_path)
-        duration = get_duration(file_path)
+        duration = get_audio_duration(file_path)
         logging.debug(f"File size: {file_size / (1024 * 1024):.2f} MB")
         logging.debug(f"Duration: {duration / 60:.2f} minutes")
 
         if file_size <= MAX_CHUNK_SIZE_MB * 1024 * 1024:
             logging.info("File under size limit - processing as single file")
 
-            text = transcribe_audio(file_path, language)  # Use the Whisper API
+            text = transcribe_audio_with_whisper(file_path, language)  # Use the Whisper API
             logging.debug(f"Transcription result: {text}")
             return text
         else:
@@ -430,7 +432,7 @@ def process_file(file_path, temp_dir, language):
             combined_texts = []
             for i, chunk in enumerate(chunk_files, 1):
                 logging.debug(f"Processing chunk {i}/{len(chunk_files)}: {chunk}")
-                text = transcribe_audio(chunk, language)  # Use the Whisper API
+                text = transcribe_audio_with_whisper(chunk, language)  # Use the Whisper API
                 combined_texts.append(text)
                 os.remove(chunk)
                 logging.info(f"Chunk {i} processed and removed")
