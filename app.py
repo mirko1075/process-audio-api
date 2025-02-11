@@ -11,6 +11,8 @@ from functools import wraps
 from dotenv import load_dotenv
 import io
 from datetime import datetime
+import time
+from flask import g
 
 
 from sentiment_analysis import process_sentiment_analysis_results
@@ -34,7 +36,7 @@ logging.info(f"Google Cloud credentials found at {GOOGLE_CREDENTIALS_PATH}")
 app = Flask(__name__)
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO)
 
 API_KEY = os.getenv('API_KEY')
 if not API_KEY:
@@ -57,6 +59,18 @@ def require_api_key(f):
         logging.error("Invalid or missing API key")
         return jsonify({"error": "Invalid or missing API key"}), 401
     return decorated
+
+@app.before_request
+def start_timer():
+    g.start_time = time.time()
+
+@app.after_request
+def log_execution_time(response):
+    if hasattr(g, 'start_time'):
+        execution_time = time.time() - g.start_time
+        print(f"Endpoint: {request.path} | Method: {request.method} | Time: {execution_time:.4f} sec")
+        response.headers["X-Execution-Time"] = str(execution_time)  # Optional: Add to headers
+    return response
 
 @app.route("/", methods=["GET"])
 def home():

@@ -30,7 +30,7 @@ OVERLAP_SECONDS = 30  # Overlap between chunks (in seconds)
 CHUNK_DURATION_SECONDS = 19 * 60  # Each chunk is 19 minutes (in seconds)
 
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 
 # Check if credentials are set
@@ -363,7 +363,7 @@ def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
                 Translated Text:
                 """
                 response = client.chat.completions.create(
-                    model="gpt-4-turbo",
+                    model="gpt-3.5-turbo",
                     messages=[{"role": "system", "content": prompt}],
                     temperature=0.1
                 )
