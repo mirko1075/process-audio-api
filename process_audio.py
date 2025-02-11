@@ -258,25 +258,30 @@ def format_transcript(response):
         formatted_transcript_array = []
         current_speaker = None
         current_text = ""
-        #append the first speaker
         logging.info(f"RESULT: {result}")
         for word in result.words:
             logging.info(f"WORD: {word}")
             if word.speaker != current_speaker:
                 if current_speaker is not None:
-                    formatted_transcript_array.append(f"Speaker {current_speaker}: {html.unescape(BeautifulSoup(current_text.strip(), 'html.parser').text)}")
+                    clean_text = html.unescape(BeautifulSoup(current_text.strip(), 'html.parser').text)
+                    formatted_transcript_array.append(f"Speaker {current_speaker}: {clean_text}")
                 current_speaker = word.speaker
                 current_text = ""
             current_text += word.punctuated_word + " "
-        #append the last speaker
         if current_text:
-            formatted_transcript_array.append(f"Speaker {current_speaker}: {html.unescape(BeautifulSoup(current_text.strip(), 'html.parser').text)}")
+            clean_text = html.unescape(BeautifulSoup(current_text.strip(), 'html.parser').text)
+            formatted_transcript_array.append(f"Speaker {current_speaker}: {clean_text}")
         logging.info(f"TYPE OF FORMATTED TRANSCRIPT: {type(formatted_transcript_array)}")
+        # Join the array with newline characters; these will be properly escaped in JSON.
         transcript = "\n".join(formatted_transcript_array)
         return {
             "formatted_transcript_array": formatted_transcript_array,
             "transcript": transcript
         }
+    except Exception as e:
+        logging.error(f"Error formatting transcript: {e}")
+        raise
+
 
     except Exception as e:
         logging.error(f"Error formatting transcript: {e}")
