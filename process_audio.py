@@ -189,10 +189,10 @@ def transcribe_audio_with_google_diarization(gcs_uri, language_code="en-US", dia
 
     # Long-running recognition for large files
     operation = speech_client.long_running_recognize(config=config, audio=audio)
-    print("Waiting for transcription to complete...")
+    logging.info("Waiting for transcription to complete...")
 
     while not operation.done():
-        print("Transcription in progress...")
+        logging.info("Transcription in progress...")
         time.sleep(5)
 
     response = operation.result()
@@ -245,7 +245,7 @@ def translate_text_google(text_list, target_language):
             # Extract translated text
             translated_texts.extend([res["translatedText"] for res in response])
 
-        return translated_texts
+        return {'translated_texts': translated_texts, 'joined_translated_text': ' '.join(translated_texts)}
 
     except Exception as e:
         logging.error(f"Error during translation: {e}")
@@ -269,7 +269,7 @@ def format_transcript(response):
 
         if current_text:
             formatted_transcript_array.append(f"Speaker {current_speaker}: {html.unescape(BeautifulSoup(current_text.strip(), 'html.parser').text)}")
-        print(f"TYPE OF FORMATTED TRANSCRIPT: {type(formatted_transcript_array)}")
+        logging.info(f"TYPE OF FORMATTED TRANSCRIPT: {type(formatted_transcript_array)}")
         return {
             "formatted_transcript_array": formatted_transcript_array,
             "transcript": response.results.channels[0].alternatives[0].paragraphs.transcript
@@ -343,7 +343,6 @@ def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
         translated_chunks = []
 
         for chunk in text_chunks:
-            print(f"Chunk: {chunk}")
             if chunk != "":
                 prompt = f"""You are an expert translator. Translate the following text from {source_lang} to {target_lang}. 
                 Ensure perfect accuracy, preserving meaning and idioms.
@@ -382,7 +381,7 @@ def convert_to_wav(input_path, output_path):
         subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         logging.debug(f"File converted to WAV: {output_path}")
     except subprocess.CalledProcessError as e:
-        print(f"FFmpeg error: {e.stderr.decode()}")
+        logging.error(f"FFmpeg error: {e.stderr.decode()}")
         raise RuntimeError(f"Failed to convert file to WAV: {e.stderr.decode()}")
 
 

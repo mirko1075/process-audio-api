@@ -3,8 +3,9 @@ from flask import Flask, request, jsonify, send_file
 import os
 import logging
 import sys
-from openpyxl import Workbook
-import pandas as pd
+from openpyxl import Workbook # type: ignore
+import pandas as pd 
+from distutils.util import strtobool # type: ignore
 from process_audio import convert_to_wav, delete_from_gcs, perform_sentiment_analysis, process_audio_file, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
 from functools import wraps
 from dotenv import load_dotenv
@@ -21,14 +22,14 @@ load_dotenv()
 GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
 if not GOOGLE_CREDENTIALS_PATH:
-    print("ERROR: GOOGLE_APPLICATION_CREDENTIALS environment variable is not set.")
+    logging.error("ERROR: GOOGLE_APPLICATION_CREDENTIALS environment variable is not set.")
     sys.exit(1)  # Exit if credentials are not set
 
 if not os.path.exists(GOOGLE_CREDENTIALS_PATH):
-    print(f"ERROR: Credentials file not found at {GOOGLE_CREDENTIALS_PATH}")
+    logging.error(f"ERROR: Credentials file not found at {GOOGLE_CREDENTIALS_PATH}")
     sys.exit(1)  # Exit if file does not exist
 
-print(f"Google Cloud credentials found at {GOOGLE_CREDENTIALS_PATH}")
+logging.info(f"Google Cloud credentials found at {GOOGLE_CREDENTIALS_PATH}")
 
 app = Flask(__name__)
 
@@ -69,7 +70,7 @@ def transcribe_and_translate():
         logging.info("Received request to transcribe and translate audio")
         
         audio_file = request.files.get("audio")
-        translate = request.form.get("translate", False)
+        translate = strtobool(request.form.get("translate", 'false'))
         translation_model = request.form.get("translation_model", "google")
         #accept google or openai
         if translate and translation_model not in ["google", "openai"]:
@@ -83,7 +84,7 @@ def transcribe_and_translate():
 
         # Process and transcribe audio
         transcription_response = process_audio_file(audio_file, language)
-        print(f"TRANSCRIPTION RESPONSE: {transcription_response}")
+        logging.info(f"TRANSCRIPTION RESPONSE: {transcription_response}")
         formatted_transcript_array = transcription_response["formatted_transcript_array"]
         transcript = transcription_response["transcript"]
         translated_text = None
@@ -154,10 +155,10 @@ def translate_text_with_openai_endpoint():
 def transcribe_endpoint():
     """API endpoint to transcribe an audio file."""
     try:
-        file = request.files.get("file")
+        file = request.files['file']
         gcs_uri = request.form.get("gcs_uri")  # Optional GCS URI
         language_code = request.form.get("language", "en-US")
-
+        temp_path = ''
         if not file and not gcs_uri:
             return jsonify({"error": "No file or GCS URI provided"}), 400
 
@@ -182,7 +183,8 @@ def transcribe_endpoint():
         if os.path.exists(temp_path):
             os.remove(temp_path)
             #delete from bucket
-            delete_from_gcs(gcs_uri)
+            if gcs_uri:
+                delete_from_gcs(gcs_uri)
 
            
 @app.route("/transcript-with-whisper", methods=["POST"])
@@ -194,6 +196,7 @@ def transcript_with_whisper_endpoint():
     logging.debug("Received request to process audio")
     audio_file = request.files.get("audio")
     language = request.form.get("language", "en")
+
     if not audio_file:
         return jsonify({"error": "No file uploaded"}), 400
 
@@ -353,7 +356,7 @@ def generate_excel():
         if "sheets" not in data:
             return jsonify({"error": "Invalid JSON format 2"}), 400
 
-        print(f"DATA: {data}")
+        logging.info(f"DATA: {data}")
 
         # Create a new Excel workbook
         workbook = Workbook()
