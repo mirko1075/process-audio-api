@@ -136,13 +136,14 @@ def translate_text_with_openai_endpoint():
     try:
         logging.info("Received request to translate text with OpenAI")
         text = request.form.get("text")
-        source_language = request.form.get("source_language")
-        target_language = request.form.get("target_language")
-        
         if not text:
             return jsonify({'error': 'Missing text in request'}), 400
+        source_language = request.form.get("source_language")
         if not source_language:
             return jsonify({'error': 'Missing source_language in request'}), 400
+        target_language = request.form.get("target_language")
+        if not target_language:
+            return jsonify({'error': 'Missing target_language in request'}), 400
         
 
         translated_text = translate_text_with_openai(text, source_language, target_language)
