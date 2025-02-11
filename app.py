@@ -6,7 +6,7 @@ import sys
 from openpyxl import Workbook # type: ignore
 import pandas as pd 
 from distutils.util import strtobool # type: ignore
-from process_audio import convert_to_wav, delete_from_gcs, perform_sentiment_analysis, process_audio_file, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
+from process_audio import convert_to_wav, delete_from_gcs, perform_sentiment_analysis, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
 from functools import wraps
 from dotenv import load_dotenv
 import io
@@ -83,7 +83,7 @@ def transcribe_and_translate():
             return jsonify({"error": "No file uploaded"}), 400
 
         # Process and transcribe audio
-        transcription_response = process_audio_file(audio_file, language)
+        transcription_response = transcribe_with_deepgram(audio_file, language)
         logging.info(f"TRANSCRIPTION RESPONSE: {transcription_response}")
         formatted_transcript_array = transcription_response["formatted_transcript_array"]
         transcript = transcription_response["transcript"]

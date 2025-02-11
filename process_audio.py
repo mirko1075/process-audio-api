@@ -272,14 +272,14 @@ def format_transcript(response):
         logging.info(f"TYPE OF FORMATTED TRANSCRIPT: {type(formatted_transcript_array)}")
         return {
             "formatted_transcript_array": formatted_transcript_array,
-            "transcript": response.results.channels[0].alternatives[0].paragraphs.transcript
+            "transcript": html.unescape(BeautifulSoup(response.results.channels[0].alternatives[0].paragraphs.transcript, 'html.parser').text)
         }
 
     except Exception as e:
         logging.error(f"Error formatting transcript: {e}")
         raise
 
-def process_audio_file(audio_file, language="en"):
+def transcribe_with_deepgram(audio_file, language="en"):
     """Processes and transcribes an uploaded audio file"""
     try:
         logging.info(f"Processing audio file: {audio_file.filename}")
@@ -341,9 +341,11 @@ def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
         # Split text into chunks to avoid token limits
         text_chunks = split_text_into_chunks(text)
         translated_chunks = []
-
-        for chunk in text_chunks:
+        text_chunks_length = len(text_chunks)
+        logging.info(f"Translating {text_chunks_length} chunks")
+        for i, chunk in enumerate(text_chunks, 1):
             if chunk != "":
+                logging.info(f"Translating chunk {i} of {text_chunks_length}")
                 prompt = f"""You are an expert translator. Translate the following text from {source_lang} to {target_lang}. 
                 Ensure perfect accuracy, preserving meaning and idioms.
                 
