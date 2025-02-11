@@ -4,9 +4,8 @@ import os
 import logging
 import sys
 from openpyxl import Workbook # type: ignore
-import pandas as pd 
 from distutils.util import strtobool # type: ignore
-from process_audio import convert_to_wav, delete_from_gcs, perform_sentiment_analysis, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
+from process_audio import convert_to_wav, create_sentiment_details_df, create_sentiment_summary_df, delete_from_gcs, generate_multi_sheet_excel, load_excel_file, perform_sentiment_analysis, process_queries, run_sentiment_analysis, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
 from functools import wraps
 from dotenv import load_dotenv
 import io
@@ -313,51 +312,50 @@ def text_to_file():
     
 @app.route('/sentiment-analysis', methods=['POST'])
 @require_api_key
-def sentiment_analysis():
+def analyze_sentiment_and_queries():
+    """
+    Endpoint that accepts:
+      - An Excel file ('file') with queries (Sheet 1: columns: Scope, Persona, Query).
+      - A text ('text') to analyze.
+      - Optionally, a 'best_model' parameter for sentiment analysis.
+    
+    It returns a multi-sheet Excel file with:
+      1. Sheet "Queries": the queries with their ChatGPT responses.
+      2. Sheet "Sentiment Details": detailed sentiment analysis data.
+      3. Sheet "Sentiment Summary": computed counts, percentages, average confidence,
+         overall sentiment, and an actionable insight.
+    """
     try:
-        logging.debug("Received request to perform sentiment analysis")
-
-        # Save the uploaded file to a temporary location
-        excel_file = request.files['file']
+        excel_file = request.files.get('file')
+        text_to_analyze = request.form.get('text')
+        best_model = bool(strtobool(request.form.get("best_model", "false")))
+        
         if not excel_file:
-            return jsonify({"error": "No file uploaded."}), 400
+            return jsonify({"error": "No Excel file provided."}), 400
+        if not text_to_analyze:
+            return jsonify({"error": "No text provided for analysis."}), 400
 
-        # Read the Excel file
-        queries_df = pd.read_excel(excel_file, sheet_name="Queries")
+        # Process queries (Sheet 1)
+        df_queries = load_excel_file(excel_file)
+        responses = process_queries(df_queries, text_to_analyze)
+        df_queries['Response'] = responses
 
-        # Perform sentiment analysis (assuming text and model are provided in the request)
-        text = request.form.get("text", "")
-        best_model = request.form.get("best_model", False)
-        sentiment_results = perform_sentiment_analysis(text, best_model)
-        logging.debug(f"Sentiment analysis complete: {sentiment_results}")
+        # Run sentiment analysis on the text
+        sentiment_results = run_sentiment_analysis(text_to_analyze, best_model)
+        df_sentiment_details = create_sentiment_details_df(sentiment_results)
+        df_sentiment_summary = create_sentiment_summary_df(df_sentiment_details)
 
-        # Process the sentiment results and queries
-        output_json = process_sentiment_analysis_results(sentiment_results, queries_df)
-
-        # Create Excel file from the JSON structure
-        workbook = Workbook()
-        workbook.remove(workbook.active)
-
-        for sheet_data in output_json["sheets"]:
-            sheet_name = sheet_data["name"]
-            sheet = workbook.create_sheet(title=sheet_name)
-
-            for row in sheet_data["data"]:
-                sheet.append(row)
-
-        # Save workbook to a BytesIO stream
-        output = io.BytesIO()
-        workbook.save(output)
-        output.seek(0)
-
-        # Return the Excel file
-        return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                         as_attachment=True, download_name="sentiment_analysis.xlsx")
-
+        # Generate the multi-sheet Excel file
+        output = generate_multi_sheet_excel(df_queries, df_sentiment_details, df_sentiment_summary)
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name="analyzed_data.xlsx"
+        )
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+        logging.error(f"Error in analyze_sentiment_and_queries endpoint: {e}")
+        return jsonify({"error": str(e)}), 500
 
     
 @app.route('/generate-excel', methods=['POST'])

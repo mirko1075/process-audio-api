@@ -3,6 +3,7 @@
 from collections import defaultdict
 import html
 from html.parser import HTMLParser
+import io
 import os
 from pathlib import Path
 from pprint import pprint
@@ -10,6 +11,7 @@ import subprocess
 import logging
 import ffmpeg
 from dotenv import load_dotenv
+import pandas as pd
 import tiktoken
 from transformers import pipeline
 import re
@@ -365,7 +367,7 @@ def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
                 response = client.chat.completions.create(
                     model="gpt-3.5-turbo",
                     messages=[{"role": "system", "content": prompt}],
-                    temperature=0.1
+                    temperature=0.0
                 )
                 translated_text = response.choices[0].message.content.strip()
                 translated_chunks.append(translated_text)
@@ -452,3 +454,135 @@ def transcript_with_whisper_large_files(file_path, temp_dir, language):
     except Exception as e:
         logging.error(f"Error processing file: {file_path}, {e}")
         raise
+
+
+def load_excel_file(excel_file):
+    """
+    Loads the Excel file and validates required columns.
+    Expected columns: 'Scope', 'Persona', 'Query'
+    """
+    df = pd.read_excel(excel_file, sheet_name=0)
+    required_columns = ['Scope', 'Persona', 'Query']
+    if not all(col in df.columns for col in required_columns):
+        raise ValueError(f"Excel file must contain columns: {required_columns}")
+    return df
+
+def process_query(query, text_to_analyze):
+    """
+    Uses ChatGPT (gpt-3.5-turbo) to check if the query is answered in the provided text.
+    Returns the response or an error message.
+    """
+    prompt = (
+        f"You are an expert in analyzing text responses. Given the following text:\n\n"
+        f"'''{text_to_analyze}'''\n\n"
+        f"Please check if the following query is answered in the text: '{query}'. "
+        "If the query is answered, provide the relevant excerpt from the text; if not, reply with 'Not answered'."
+    )
+    try:
+        completion = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.0
+        )
+        answer = completion.choices[0].message.content.strip()
+    except Exception as e:
+        logging.error(f"Error processing query '{query}': {e}")
+        answer = f"Error: {str(e)}"
+    return answer
+
+def process_queries(df, text_to_analyze):
+    """
+    Processes each query in the DataFrame and returns a list of responses.
+    """
+    responses = []
+    for _, row in df.iterrows():
+        query = row['Query']
+        answer = process_query(query, text_to_analyze)
+        responses.append(answer)
+    return responses
+
+def run_sentiment_analysis(text, best_model=False):
+    """
+    Runs sentiment analysis on the provided text.
+    Expects a result dict with a 'sentiment_analysis' key that is a list of tuples:
+      (sentence, rating, confidence)
+    """
+    return perform_sentiment_analysis(text, best_model)
+
+def create_sentiment_details_df(sentiment_results):
+    """
+    Creates a DataFrame from the detailed sentiment analysis.
+    Each row corresponds to one analyzed sentence.
+    Expected columns: ["Sentence", "Rating", "Confidence"]
+    """
+    details = sentiment_results.get("sentiment_analysis", [])
+    df = pd.DataFrame(details, columns=["Sentence", "Rating", "Confidence"])
+    return df
+
+def create_sentiment_summary_df(details_df):
+    """
+    Creates a summary DataFrame that computes counts and percentages of negative, neutral, and positive sentences.
+    Uses the following rule:
+      - Negative: rating starts with '1' or '2'
+      - Neutral: rating starts with '3'
+      - Positive: rating starts with '4' or '5'
+    Also computes average confidence and determines overall sentiment.
+    """
+    # Calculate counts based on the first character of the rating string.
+    negative_count = details_df['Rating'].apply(lambda x: x.strip()[0] in ['1', '2']).sum()
+    neutral_count  = details_df['Rating'].apply(lambda x: x.strip()[0] == '3').sum()
+    positive_count = details_df['Rating'].apply(lambda x: x.strip()[0] in ['4', '5']).sum()
+    total = len(details_df)
+    
+    avg_confidence = details_df['Confidence'].mean() if total > 0 else 0
+    negative_pct = (negative_count / total) * 100 if total > 0 else 0
+    neutral_pct  = (neutral_count  / total) * 100 if total > 0 else 0
+    positive_pct = (positive_count / total) * 100 if total > 0 else 0
+
+    if positive_count > negative_count:
+        overall_sentiment = "POSITIVE"
+    elif negative_count > positive_count:
+        overall_sentiment = "NEGATIVE"
+    else:
+        overall_sentiment = "NEUTRAL"
+
+    rows = [
+        ("Total Sentences", total),
+        ("Negative Sentences", negative_count),
+        ("Neutral Sentences", neutral_count),
+        ("Positive Sentences", positive_count),
+        ("Negative Percentage", f"{negative_pct:.1f}%"),
+        ("Neutral Percentage", f"{neutral_pct:.1f}%"),
+        ("Positive Percentage", f"{positive_pct:.1f}%"),
+        ("Average Confidence", f"{avg_confidence:.1f}"),
+        ("Overall Sentiment", overall_sentiment),
+        (
+            "Actionable Insight",
+            "Investigate negative feedback to improve customer satisfaction."
+            if overall_sentiment == "NEGATIVE" 
+            else "Leverage positive sentiment to promote your strengths."
+        )
+    ]
+    df_summary = pd.DataFrame(rows, columns=["Metric", "Value"])
+    return df_summary
+
+def generate_multi_sheet_excel(df_queries, df_sentiment_details, df_sentiment_summary):
+    """
+    Generates an Excel file with three sheets:
+      - Sheet "Queries": queries with their ChatGPT responses.
+      - Sheet "Sentiment Details": detailed sentiment analysis data.
+      - Sheet "Sentiment Summary": general sentiment metrics and actionable insights.
+    Returns a BytesIO object containing the Excel file.
+    """
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df_queries.to_excel(writer, sheet_name="Queries", index=False)
+        df_sentiment_details.to_excel(writer, sheet_name="Sentiment Details", index=False)
+        df_sentiment_summary.to_excel(writer, sheet_name="Sentiment Summary", index=False)
+    output.seek(0)
+    return output
+
+# ---------------- Endpoint ---------------- #
