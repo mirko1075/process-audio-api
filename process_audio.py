@@ -360,7 +360,7 @@ def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
             if chunk != "":
                 logging.info(f"Translating chunk {i} of {text_chunks_length}")
                 prompt = f"""You are an expert translator. Translate the following text from {source_lang} to {target_lang}. 
-                Ensure perfect accuracy, preserving meaning and idioms.
+                Ensure perfect accuracy, preserving meaning and idioms. If you find sentences or words that are repeated many times (more then 3 times in a row) that comes from bug of the model used for transcription, please fix them and keep only one of them.
                 
                 Text:
                 {chunk}
