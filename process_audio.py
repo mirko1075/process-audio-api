@@ -303,7 +303,7 @@ def transcribe_with_deepgram(audio_file, language="en"):
         payload: FileSource = {"buffer": buffer_data}
 
         options = PrerecordedOptions(
-            model="nova-3",
+            model="nova-2",
             smart_format=True,
             language=language,
             diarize=True,
