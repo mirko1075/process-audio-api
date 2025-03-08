@@ -5,16 +5,19 @@ import logging
 import sys
 from openpyxl import Workbook # type: ignore
 from distutils.util import strtobool # type: ignore
-from process_audio import convert_to_wav, create_sentiment_details_df, create_sentiment_summary_df, delete_from_gcs, generate_multi_sheet_excel, load_excel_file, perform_sentiment_analysis, process_queries, run_sentiment_analysis, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
 from functools import wraps
 from dotenv import load_dotenv
 import io
 from datetime import datetime
 import time
 from flask import g
+from process_audio import create_word_document, convert_to_wav, create_sentiment_details_df, create_sentiment_summary_df, delete_from_gcs, generate_multi_sheet_excel, load_excel_file, process_queries, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
+from sentiment_analysis import run_sentiment_analysis
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 
+app = FastAPI()
 
-from sentiment_analysis import process_sentiment_analysis_results
 
 # Load environment variables
 load_dotenv()
@@ -313,22 +316,9 @@ def text_to_file():
 @app.route('/sentiment-analysis', methods=['POST'])
 @require_api_key
 def analyze_sentiment_and_queries():
-    """
-    Endpoint that accepts:
-      - An Excel file ('file') with queries (Sheet 1: columns: Scope, Persona, Query).
-      - A text ('text') to analyze.
-      - Optionally, a 'best_model' parameter for sentiment analysis.
-    
-    It returns a multi-sheet Excel file with:
-      1. Sheet "Queries": the queries with their ChatGPT responses.
-      2. Sheet "Sentiment Details": detailed sentiment analysis data.
-      3. Sheet "Sentiment Summary": computed counts, percentages, average confidence,
-         overall sentiment, and an actionable insight.
-    """
     try:
         excel_file = request.files.get('file')
         text_to_analyze = request.form.get('text')
-        best_model = bool(strtobool(request.form.get("best_model", "false")))
         
         if not excel_file:
             return jsonify({"error": "No Excel file provided."}), 400
@@ -340,8 +330,8 @@ def analyze_sentiment_and_queries():
         responses = process_queries(df_queries, text_to_analyze)
         df_queries['Response'] = responses
 
-        # Run sentiment analysis on the text
-        sentiment_results = run_sentiment_analysis(text_to_analyze, best_model)
+        # Run sentiment analysis using the Hospital_Reviews model
+        sentiment_results = run_sentiment_analysis(text_to_analyze)
         df_sentiment_details = create_sentiment_details_df(sentiment_results)
         df_sentiment_summary = create_sentiment_summary_df(df_sentiment_details)
 
@@ -356,7 +346,6 @@ def analyze_sentiment_and_queries():
     except Exception as e:
         logging.error(f"Error in analyze_sentiment_and_queries endpoint: {e}")
         return jsonify({"error": str(e)}), 500
-
     
 @app.route('/generate-excel', methods=['POST'])
 @require_api_key
@@ -403,5 +392,21 @@ def generate_excel():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
+@app.route("/generate-word", methods=["POST"])
+@require_api_key
+def generate_word():
+    """
+    API endpoint to generate a Word document from FormData (text + filename).
+    """
+    try:
+        content = request.form.get("text", "")
+        filename = request.form.get("fileName", "file.docx")
+
+        file_path = create_word_document(content, filename)
+        return send_file(file_path, as_attachment=True)
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

@@ -23,6 +23,9 @@ from google.cloud import translate_v2 as translate
 from deepgram import DeepgramClient, PrerecordedOptions, FileSource
 from bs4 import BeautifulSoup  # This works with beautifulsoup4
 
+from docx import Document
+import os
+
 load_dotenv()
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -138,9 +141,9 @@ def perform_sentiment_analysis(text=None, best_model=False):
         dict: Sentiment analysis results.
     """
     try:
-
         # Load a pre-trained sentiment analysis model
-        sentiment_analyzer = pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
+        sentiment_analyzer = pipeline("sentiment-analysis", model="brettclaus/Hospital_Reviews")
+        print(f"Sentiment analyzer: {sentiment_analyzer}")
         # Split text into sentences
         sentences = split_text_at_sentences(text)
 
@@ -504,13 +507,6 @@ def process_queries(df, text_to_analyze):
         responses.append(answer)
     return responses
 
-def run_sentiment_analysis(text, best_model=False):
-    """
-    Runs sentiment analysis on the provided text.
-    Expects a result dict with a 'sentiment_analysis' key that is a list of tuples:
-      (sentence, rating, confidence)
-    """
-    return perform_sentiment_analysis(text, best_model)
 
 def create_sentiment_details_df(sentiment_results):
     """
@@ -524,30 +520,43 @@ def create_sentiment_details_df(sentiment_results):
 
 def create_sentiment_summary_df(details_df):
     """
-    Creates a summary DataFrame that computes counts and percentages of negative, neutral, and positive sentences.
-    Uses the following rule:
-      - Negative: rating starts with '1' or '2'
-      - Neutral: rating starts with '3'
-      - Positive: rating starts with '4' or '5'
-    Also computes average confidence and determines overall sentiment.
-    """
-    # Calculate counts based on the first character of the rating string.
-    negative_count = details_df['Rating'].apply(lambda x: x.strip()[0] in ['1', '2']).sum()
-    neutral_count  = details_df['Rating'].apply(lambda x: x.strip()[0] == '3').sum()
-    positive_count = details_df['Rating'].apply(lambda x: x.strip()[0] in ['4', '5']).sum()
-    total = len(details_df)
+    Creates a summary DataFrame that computes counts, percentages, and additional metrics
+    from the detailed sentiment analysis.
     
-    avg_confidence = details_df['Confidence'].mean() if total > 0 else 0
+    Classification:
+      - Negative: rating is 1 or 2
+      - Neutral: rating is 3
+      - Positive: rating is 4 or 5
+
+    It also extracts extreme values (highest/lowest rating and confidence) and provides an actionable insight.
+    """
+    # Ensure ratings are treated as strings and extract the numeric part.
+    details_df["RatingStr"] = details_df["Rating"].apply(lambda x: str(x).strip())
+    details_df["RatingDigit"] = details_df["RatingStr"].apply(lambda x: int(x.split()[0]) if x.split() else None)
+
+    negative_count = details_df["RatingDigit"].apply(lambda x: x in [1, 2]).sum()
+    neutral_count  = details_df["RatingDigit"].apply(lambda x: x == 3).sum()
+    positive_count = details_df["RatingDigit"].apply(lambda x: x in [4, 5]).sum()
+    total = len(details_df)
+
+    avg_confidence = details_df["Confidence"].mean() if total > 0 else 0
     negative_pct = (negative_count / total) * 100 if total > 0 else 0
     neutral_pct  = (neutral_count  / total) * 100 if total > 0 else 0
     positive_pct = (positive_count / total) * 100 if total > 0 else 0
 
+    # Determine overall sentiment based on counts.
     if positive_count > negative_count:
         overall_sentiment = "POSITIVE"
     elif negative_count > positive_count:
         overall_sentiment = "NEGATIVE"
     else:
         overall_sentiment = "NEUTRAL"
+
+    # Identify extreme cases.
+    highest_rating_row = details_df.loc[details_df["RatingDigit"].idxmax()] if total > 0 else None
+    lowest_rating_row = details_df.loc[details_df["RatingDigit"].idxmin()] if total > 0 else None
+    highest_conf_row = details_df.loc[details_df["Confidence"].idxmax()] if total > 0 else None
+    lowest_conf_row = details_df.loc[details_df["Confidence"].idxmin()] if total > 0 else None
 
     rows = [
         ("Total Sentences", total),
@@ -558,14 +567,31 @@ def create_sentiment_summary_df(details_df):
         ("Neutral Percentage", f"{neutral_pct:.1f}%"),
         ("Positive Percentage", f"{positive_pct:.1f}%"),
         ("Average Confidence", f"{avg_confidence:.1f}"),
-        ("Overall Sentiment", overall_sentiment),
-        (
-            "Actionable Insight",
-            "Investigate negative feedback to improve customer satisfaction."
-            if overall_sentiment == "NEGATIVE" 
-            else "Leverage positive sentiment to promote your strengths."
-        )
+        ("Overall Sentiment", overall_sentiment)
     ]
+
+    if highest_rating_row is not None:
+        rows.append(("Highest Rated Sentence", highest_rating_row["Sentence"]))
+        rows.append(("Highest Rating", highest_rating_row["RatingStr"]))
+    if lowest_rating_row is not None:
+        rows.append(("Lowest Rated Sentence", lowest_rating_row["Sentence"]))
+        rows.append(("Lowest Rating", lowest_rating_row["RatingStr"]))
+    if highest_conf_row is not None:
+        rows.append(("Highest Confidence Sentence", highest_conf_row["Sentence"]))
+        rows.append(("Highest Confidence", f"{highest_conf_row['Confidence']:.1f}"))
+    if lowest_conf_row is not None:
+        rows.append(("Lowest Confidence Sentence", lowest_conf_row["Sentence"]))
+        rows.append(("Lowest Confidence", f"{lowest_conf_row['Confidence']:.1f}"))
+    
+    # Create an actionable insight based on the overall sentiment.
+    if overall_sentiment == "NEGATIVE":
+        insight = "Investigate negative feedback trends and consider targeted improvements."
+    elif overall_sentiment == "POSITIVE":
+        insight = "Leverage positive feedback in your campaigns to boost your brand."
+    else:
+        insight = "Monitor neutral sentiment for opportunities to enhance customer engagement."
+    rows.append(("Actionable Insight", insight))
+
     df_summary = pd.DataFrame(rows, columns=["Metric", "Value"])
     return df_summary
 
@@ -584,5 +610,31 @@ def generate_multi_sheet_excel(df_queries, df_sentiment_details, df_sentiment_su
         df_sentiment_summary.to_excel(writer, sheet_name="Sentiment Summary", index=False)
     output.seek(0)
     return output
+
+def create_word_document(content: str, filename: str = "transcription.docx") -> str:
+    """
+    Generates a Word document (.docx) with the given content.
+
+    Args:
+        content (str): The text content to be added to the Word file.
+        filename (str): The name of the Word document.
+
+    Returns:
+        str: The path of the saved Word document.
+    """
+    try:
+        doc = Document()
+        doc.add_paragraph(content)
+
+        # Define the file path (modify if needed)
+        file_path = f"/tmp/{filename}"
+
+        # Save the document
+        doc.save(file_path)
+
+        return file_path
+
+    except Exception as e:
+        raise Exception(f"Error generating Word document: {e}")
 
 # ---------------- Endpoint ---------------- #
