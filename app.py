@@ -13,11 +13,6 @@ import time
 from flask import g
 from process_audio import create_word_document, convert_to_wav, create_sentiment_details_df, create_sentiment_summary_df, delete_from_gcs, generate_multi_sheet_excel, load_excel_file, process_queries, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
 from sentiment_analysis import run_sentiment_analysis
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
-
-app = FastAPI()
-
 
 # Load environment variables
 load_dotenv()
