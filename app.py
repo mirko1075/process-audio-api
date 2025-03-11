@@ -11,7 +11,7 @@ import io
 from datetime import datetime
 import time
 from flask import g
-from process_audio import RATE_PER_MINUTE, create_word_document, convert_to_wav, create_sentiment_details_df, create_sentiment_summary_df, delete_from_gcs, generate_multi_sheet_excel, get_audio_duration, load_excel_file, log_audio_processing, process_queries, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
+from process_audio import RATE_PER_MINUTE, create_word_document, convert_to_wav, create_sentiment_details_df, create_sentiment_summary_df, delete_from_gcs, generate_multi_sheet_excel, get_audio_duration_from_form_file, load_excel_file, log_audio_processing, process_queries, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
 from sentiment_analysis import run_sentiment_analysis
 
 # Load environment variables
@@ -75,6 +75,7 @@ def home():
 
 
 @app.route('/transcribe_and_translate', methods=['POST'])
+@require_api_key
 def transcribe_and_translate():
     """Handles audio transcription and translation"""
     try:
@@ -92,8 +93,7 @@ def transcribe_and_translate():
 
         if not audio_file:
             return jsonify({"error": "No file uploaded"}), 400
-        #calculate audio duration
-        audio_duration = get_audio_duration(audio_file)
+
         # Process and transcribe audio
         transcription_response = transcribe_with_deepgram(audio_file, language)
         logging.info(f"TRANSCRIPTION RESPONSE: {transcription_response}")
@@ -103,17 +103,36 @@ def transcribe_and_translate():
         if translate:
             # Send transcript for translation
             translated_text = translate_text_with_openai(transcript, language, target_language)
+
         # Return JSON response
         return jsonify({
             "formatted_transcript_array": formatted_transcript_array,
             "transcript": transcript,
             "translated_text": translated_text,
-            "audio_duration": audio_duration
         })
 
     except Exception as e:
         logging.error(f"Error in transcribe_and_translate: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+@app.route("/get-audio-duration", methods=["POST"])
+@require_api_key
+def get_audio_duration_endpoint():
+    """
+    Endpoint to upload an audio file and return its duration.
+    """
+    audio_file = request.files.get("audio")
+
+    if not audio_file:
+        return jsonify({"error": "No audio file provided"}), 400
+
+    duration, error = get_audio_duration_from_form_file(audio_file)
+
+    if error:
+        return jsonify({"error": error}), 400
+
+    return jsonify({"message": "Audio processed successfully", "duration_minutes": duration}), 200
+
 
 @app.route('/translate-with-google', methods=['POST'])
 @require_api_key

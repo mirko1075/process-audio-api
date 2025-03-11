@@ -21,6 +21,7 @@ deprecation==2.1.0
 dill==0.3.8
 distro==1.9.0
 et_xmlfile==2.0.0
+fastapi==0.115.11
 ffmpeg-python==0.2.0
 filelock==3.17.0
 Flask==3.1.0
@@ -95,6 +96,7 @@ pyasn1==0.6.1
 pyasn1_modules==0.4.1
 pydantic==2.10.5
 pydantic_core==2.27.2
+pydub==0.25.1
 pyparsing==3.2.1
 python-dateutil==2.9.0.post0
 python-docx==1.1.2

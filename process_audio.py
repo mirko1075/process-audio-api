@@ -2,11 +2,9 @@
 
 from collections import defaultdict
 import html
-from html.parser import HTMLParser
 import io
 import os
 from pathlib import Path
-from pprint import pprint
 import subprocess
 import logging
 import ffmpeg
@@ -27,21 +25,23 @@ from oauth2client.service_account import ServiceAccountCredentials
 import datetime
 from docx import Document
 import os
-
+from pydub import AudioSegment
 load_dotenv()
+
+# Constants
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-# Constants
 MAX_CHUNK_SIZE_MB = 20  # Max file size in MB before we chunk
 OVERLAP_SECONDS = 30  # Overlap between chunks (in seconds)
 CHUNK_DURATION_SECONDS = 19 * 60  # Each chunk is 19 minutes (in seconds)
 GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "config/secrets/gcs.json")
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_CREDENTIALS_PATH, scope)
-google_client = gspread.authorize(creds)
-
 # Tariffa per minuto (€12 per ora = €0,20 al minuto)
 RATE_PER_MINUTE = 12 / 60  
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_CREDENTIALS_PATH, scope)
+
+google_client = gspread.authorize(creds)
+
 
 logging.basicConfig(level=logging.INFO)
 
@@ -62,6 +62,53 @@ def split_text_at_sentences(text):
     sentences = re.split(r'(?<=[.!?])\s+', text)
     return sentences
 
+#get audio duration from form file
+
+def get_audio_duration_from_form_file(audio_file):
+    """
+    Extracts the duration of an uploaded audio file without corruption.
+    Processes the file on disk instead of memory to avoid moov atom issues.
+    """
+    try:
+        # Read file into memory
+        audio_data = io.BytesIO(audio_file.read())
+
+        # Determine file extension from filename
+        file_ext = audio_file.filename.split('.')[-1].lower()
+
+        # Ensure format is supported
+        supported_formats = ["mp3", "wav", "ogg", "m4a", "aac"]
+        if file_ext not in supported_formats:
+            return None, f"Unsupported file format: {file_ext}"
+
+        # Save the file to disk (to prevent FFmpeg processing errors)
+        temp_audio_path = f"temp_audio.{file_ext}"
+        with open(temp_audio_path, "wb") as f:
+            f.write(audio_data.getbuffer())
+
+        # If the file is m4a, convert it to wav first
+        if file_ext == "m4a":
+            converted_audio_path = "temp_audio_converted.wav"
+            try:
+                subprocess.run(["ffmpeg", "-i", temp_audio_path, converted_audio_path, "-y"], check=True)
+                os.remove(temp_audio_path)  # Delete the original to avoid conflicts
+                temp_audio_path = converted_audio_path  # Use the converted file
+            except subprocess.CalledProcessError as e:
+                return None, f"FFmpeg conversion error: {str(e)}"
+
+        # Load the audio file
+        audio = AudioSegment.from_file(temp_audio_path)
+        duration_minutes = round(len(audio) / 1000.0 / 60.0, 2)  # Convert ms to seconds rounded to 2 decimal places
+        
+        # Cleanup the temp file
+        os.remove(temp_audio_path)
+
+        return duration_minutes, None
+
+    except Exception as e:
+        print(f"Error processing audio file: {e}")
+        return None, f"Error processing file: {str(e)}"
+    
 def get_audio_duration(input_file):
     cmd = [
         'ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of',
