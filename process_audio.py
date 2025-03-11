@@ -22,7 +22,9 @@ from google.cloud import storage
 from google.cloud import translate_v2 as translate
 from deepgram import DeepgramClient, PrerecordedOptions, FileSource
 from bs4 import BeautifulSoup  # This works with beautifulsoup4
-
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+import datetime
 from docx import Document
 import os
 
@@ -33,13 +35,19 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 MAX_CHUNK_SIZE_MB = 20  # Max file size in MB before we chunk
 OVERLAP_SECONDS = 30  # Overlap between chunks (in seconds)
 CHUNK_DURATION_SECONDS = 19 * 60  # Each chunk is 19 minutes (in seconds)
+GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "config/secrets/gcs.json")
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_CREDENTIALS_PATH, scope)
+google_client = gspread.authorize(creds)
 
+# Tariffa per minuto (€12 per ora = €0,20 al minuto)
+RATE_PER_MINUTE = 12 / 60  
 
 logging.basicConfig(level=logging.INFO)
 
 
 # Check if credentials are set
-GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "config/secrets/gcs.json")
+
 if not os.path.exists(GOOGLE_CREDENTIALS_PATH):
     raise FileNotFoundError(f"Google credentials not found at {GOOGLE_CREDENTIALS_PATH}")
 
@@ -637,4 +645,59 @@ def create_word_document(content: str, filename: str = "transcription.docx") -> 
     except Exception as e:
         raise Exception(f"Error generating Word document: {e}")
 
-# ---------------- Endpoint ---------------- #
+
+def get_or_create_sheet(user_code):
+    """
+    Verifica se il foglio Google Sheets esiste, altrimenti lo crea con la struttura necessaria.
+    """
+    sheet_name = f"{user_code}_usage_audio_translate"
+
+    print(f"DEBUG: Verifica foglio con nome: {sheet_name}")
+
+    try:
+        sheet = google_client.open(sheet_name).sheet1  # Prova ad aprire il foglio esistente
+        print(f"DEBUG: Il foglio {sheet_name} esiste già.")
+    except gspread.exceptions.SpreadsheetNotFound:
+        try:
+            print(f"DEBUG: Il foglio {sheet_name} non esiste. Creazione in corso...")
+            sheet = google_client.create(sheet_name).sheet1
+            sheet.append_row(["Data e Ora", "Nome File", "Durata (minuti)", "Costo Unitario (€)", "Costo Totale (€)"])
+            print(f"DEBUG: Creato nuovo foglio: {sheet_name}")
+        except Exception as e:
+            print(f"DEBUG: Errore durante la creazione del foglio: {e}")
+            return None
+
+    return sheet
+
+
+
+def log_audio_processing(user_code, filename, duration):
+    """
+    Registra la trascrizione e la durata dell'audio nel Google Sheet.
+    """
+    try:
+        sheet = get_or_create_sheet(user_code)  # Assicura che il foglio esista
+
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # Ensure duration is a float
+        try:
+            duration = float(duration)
+        except ValueError as ve:
+            logging.error(f"ERROR: Invalid duration value: {duration} - {ve}")
+            return None  # Avoid raising an error
+
+        cost_per_minute = RATE_PER_MINUTE
+        total_cost = duration * cost_per_minute
+
+        # Debug: Print values before inserting into Google Sheets
+        logging.info(f"DEBUG: Logging to Google Sheets -> {now}, {filename}, {duration}, {cost_per_minute}, {total_cost}")
+
+        sheet.append_row([now, filename, duration, f"{cost_per_minute:.2f}", f"{total_cost:.2f}"])
+        logging.info(f"Dati salvati su Google Sheet: {filename} - {duration} min - €{total_cost:.2f}")
+
+        return True  # Indicate success
+
+    except Exception as e:
+        logging.error(f"Errore durante il salvataggio dei dati su Google Sheet: {e}")
+        return None  # Don't raise the error, just return None

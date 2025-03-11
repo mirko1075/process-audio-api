@@ -11,7 +11,7 @@ import io
 from datetime import datetime
 import time
 from flask import g
-from process_audio import create_word_document, convert_to_wav, create_sentiment_details_df, create_sentiment_summary_df, delete_from_gcs, generate_multi_sheet_excel, load_excel_file, process_queries, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
+from process_audio import RATE_PER_MINUTE, create_word_document, convert_to_wav, create_sentiment_details_df, create_sentiment_summary_df, delete_from_gcs, generate_multi_sheet_excel, get_audio_duration, load_excel_file, log_audio_processing, process_queries, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
 from sentiment_analysis import run_sentiment_analysis
 
 # Load environment variables
@@ -92,7 +92,8 @@ def transcribe_and_translate():
 
         if not audio_file:
             return jsonify({"error": "No file uploaded"}), 400
-
+        #calculate audio duration
+        audio_duration = get_audio_duration(audio_file)
         # Process and transcribe audio
         transcription_response = transcribe_with_deepgram(audio_file, language)
         logging.info(f"TRANSCRIPTION RESPONSE: {transcription_response}")
@@ -106,7 +107,8 @@ def transcribe_and_translate():
         return jsonify({
             "formatted_transcript_array": formatted_transcript_array,
             "transcript": transcript,
-            "translated_text": translated_text
+            "translated_text": translated_text,
+            "audio_duration": audio_duration
         })
 
     except Exception as e:
@@ -402,6 +404,42 @@ def generate_word():
     
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
+
+
+
+@app.route("/log-audio-usage", methods=["POST"])
+@require_api_key
+def log_audio_usage():
+    """
+    Endpoint per elaborare l'audio e registrare la durata.
+    """
+    try:
+        user_code = request.form.get("user_code")  # Codice utente per identificare il file
+        filename = request.form.get("fileName")
+        duration = request.form.get("duration")
+
+        if not user_code or not filename or not duration:
+            return jsonify({"error": "Manca il codice utente, il nome del file o la durata"}), 400
+
+        # Log the data
+        result = log_audio_processing(user_code, filename, duration)
+
+        if result is None:
+            return jsonify({"error": "Error during Google Sheets logging"}), 500
+
+        return jsonify({
+            "message": "File elaborato con successo",
+            "user_code": user_code,
+            "filename": filename,
+            "duration": duration,
+            "cost_per_minute": f"{RATE_PER_MINUTE:.2f}",
+            "total_cost": f"{(float(duration) * RATE_PER_MINUTE):.2f}"
+        }), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
