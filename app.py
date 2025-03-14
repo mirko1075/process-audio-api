@@ -576,42 +576,30 @@ def transcribe_audio_with_assemblyai():
     audio_file.save(temp_path)
     
     try:
-        # Create a transcription config with speaker diarization enabled
+        # Configure for Chinese with Nano model and speaker diarization
         config = aai.TranscriptionConfig(
+            language_code="zh",
             speech_model=aai.SpeechModel.nano,
-            language_code=language,
             speaker_labels=True
         )
         
-        # Create a transcriber and transcribe the audio with the config
         transcriber = aai.Transcriber()
         transcript = transcriber.transcribe(temp_path, config)
         
-        # Check if transcription was successful
         if transcript.status == aai.TranscriptStatus.error:
             return jsonify({"error": transcript.error}), 500
         
-        # Prepare response with full transcript and speaker information
-        response = {
-            "transcription": transcript.text,
-            "utterances": []
-        }
-        
-        # Add speaker-specific utterances
+        # Format the transcript with speaker labels as requested
+        formatted_transcript = ""
         for utterance in transcript.utterances:
-            response["utterances"].append({
-                "speaker": utterance.speaker,
-                "text": utterance.text,
-                "start": utterance.start,
-                "end": utterance.end
-            })
+            formatted_transcript += f"speaker{utterance.speaker}: {utterance.text}\n"
         
-        return jsonify(response)
+        return jsonify({
+            "transcription": formatted_transcript,
+        })
     finally:
-        # Clean up the temporary file
         if os.path.exists(temp_path):
             os.remove(temp_path)
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
