@@ -428,13 +428,44 @@ def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
         for i, chunk in enumerate(text_chunks, 1):
             if chunk != "":
                 logging.info(f"Translating chunk {i} of {text_chunks_length}")
-                prompt = f"""You are an expert translator. Translate the following text from {source_lang} to {target_lang}. 
-                Ensure perfect accuracy, preserving meaning and idioms. If you find sentences or words that are repeated many times (more then 3 times in a row) that comes from bug of the model used for transcription, please fix them and keep only one of them.
-                
-                Text:
-                {chunk}
+                prompt = f"""Translate the following text from {source_lang} to {target_lang} with extreme precision, especially in medical terminology, molecule names, test names, and ambiguous phrases. Strictly follow these guidelines:
 
-                Translated Text:
+                    Accuracy is Paramount
+
+                    Ensure that all medical terms, anatomical references, and disease names are translated with precision and according to standard medical terminology in {target_lang}.
+                    DO NOT assume common meanings—always verify potential medical interpretations before finalizing the translation.
+                    Molecule Names & Test Names
+
+                    Always retain the full and precise name of any molecule, biomarker, protein, enzyme, drug, or laboratory test.
+                    If the {source_lang} term seems truncated or missing qualifiers (e.g., missing the organ/system of origin),
+                    Verify the full form based on context and use the medically correct name in {target_lang}.
+                    If a term refers to a specific diagnostic test, branded test, or proprietary medical product, explicitly use its official English name instead of a generic translation.
+                    Handling Ambiguous or Implicit Terms
+
+                    If the {source_lang} text omits crucial clarifications,
+                    Assess the context and select the most medically appropriate translation in {target_lang}.
+                    If uncertain, add a clarifying note in brackets (e.g., “elastase [assumed pancreatic elastase-1 based on context]”).
+                    If a term has multiple medical interpretations, prioritize the most relevant meaning for the given context.
+                    If a term has a non-medical common meaning but is used in a medical context, translate it using the appropriate medical terminology.
+                    Double-Check for Proprietary or Branded Terms
+
+                    If the term could refer to a specific branded medical test, reagent, or molecule, research the correct name in {target_lang} and use it explicitly instead of a generic translation.
+                    Contextual Understanding & Verification
+
+                    Read the entire passage before translating individual terms to ensure correct medical interpretation.
+                    If necessary, restructure phrases to match the correct medical syntax in {target_lang} while preserving accuracy.
+                    Standard Terminology
+
+                    Use official medical nomenclature from sources such as ICD, MedDRA, WHO, or equivalent regulatory bodies in {target_lang}.
+                    If a direct translation does not exist, use the closest medical equivalent or provide a brief clarifying phrase.
+                    Verification Requirement
+
+                    If uncertain about a term, consult authoritative medical dictionaries, scientific references, or databases before finalizing the translation.
+                    Never guess or approximate medical terms—ensure that all terms are accurately translated based on context.
+                
+                    Text TO TRANSLATE:
+                    {chunk}
+
                 """
                 response = client.chat.completions.create(
                     model="gpt-3.5-turbo",
