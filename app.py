@@ -577,7 +577,7 @@ def transcribe_audio_with_assemblyai():
     
     try:
         # Create a transcription config with speaker diarization enabled
-        config = aai.TranscriptionConfig(speaker_labels=True)
+        config = aai.TranscriptionConfig(speaker_labels=True, language_code=language)
         
         # Create a transcriber and transcribe the audio with the config
         transcriber = aai.Transcriber()
