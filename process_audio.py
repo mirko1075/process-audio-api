@@ -754,7 +754,7 @@ def log_audio_processing(user_code, filename, duration):
         # Debug: Print values before inserting into Google Sheets
         logging.info(f"DEBUG: Logging to Google Sheets -> {now}, {filename}, {duration}, {cost_per_minute}, {total_cost}")
 
-        sheet.append_row([now, filename, duration, f"{cost_per_minute:.2f}", f"{total_cost:.2f}"])
+        sheet.append_row([now, filename, duration, f"{cost_per_minute:.2f}", f"{total_cost:.2f}", 'YES'])
         logging.info(f"Dati salvati su Google Sheet: {filename} - {duration} min - €{total_cost:.2f}")
 
         return True  # Indicate success
