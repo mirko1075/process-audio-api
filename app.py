@@ -14,6 +14,7 @@ from flask import g
 import requests
 from process_audio import RATE_PER_MINUTE, create_word_document, convert_to_wav, create_sentiment_details_df, create_sentiment_summary_df, delete_from_gcs, generate_multi_sheet_excel, get_audio_duration_from_form_file, load_excel_file, log_audio_processing, process_queries, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
 from sentiment_analysis import run_sentiment_analysis
+import assemblyai as aai
 
 # Load environment variables
 load_dotenv()
@@ -32,11 +33,14 @@ if not os.path.exists(GOOGLE_CREDENTIALS_PATH):
 logging.info(f"Google Cloud credentials found at {GOOGLE_CREDENTIALS_PATH}")
 
 app = Flask(__name__)
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
 API_KEY = os.getenv('API_KEY')
+ASSEMBLYAI_API_KEY = os.getenv('ASSEMBLYAI_API_KEY')
+
+aai.settings.api_key = ASSEMBLYAI_API_KEY
+
 if not API_KEY:
     raise ValueError("API_KEY must be set in .env file")
 
@@ -497,6 +501,112 @@ def log_audio_usage():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/translate-with-deepl', methods=['POST'])
+@require_api_key
+def translate_with_deepl():
+    text = request.form.get("text")
+    if not text:
+        return jsonify({'error': 'Missing text in request'}), 400
+    source_language = request.form.get("source_language")
+    if not source_language:
+        return jsonify({'error': 'Missing source_language in request'}), 400
+    target_language = request.form.get("target_language")
+    if not target_language:
+        return jsonify({'error': 'Missing target_language in request'}), 400
+    file_name = request.form.get("fileName")
+    if not file_name:
+        return jsonify({'error': 'Missing file_name in request'}), 400
+    duration = request.form.get("duration")
+    if not duration:
+        return jsonify({'error': 'Missing duration in request'}), 400
+    drive_id = request.form.get("driveId")
+    if not drive_id:
+        return jsonify({'error': 'Missing driveId in request'}), 400
+    group_id = request.form.get("groupId")
+    if not group_id:
+        return jsonify({'error': 'Missing groupId in request'}), 400
+    file_id = request.form.get("fileId")
+    if not file_id:
+        return jsonify({'error': 'Missing fileId in request'}), 400
+    folder_id = request.form.get("folderId")
+    if not folder_id:
+        return jsonify({'error': 'Missing folderId in request'}), 400
+    project_name = request.form.get("projectName")
+    if not project_name:
+        return jsonify({'error': 'Missing projectName in request'}), 400
+       
+    try:
+        translated_text = translate_text_with_deepl(text, target_language)
+    #make an http request to  https://hook.eu2.make.com/xjxlm9ehhdn16mhtfnp77sxpgidvagqe with form-data body
+        return jsonify({'translated_text': translated_text})
+        response = requests.post(
+            "https://hook.eu2.make.com/xjxlm9ehhdn16mhtfnp77sxpgidvagqe",
+            data={
+                "translation": translated_text,
+                "transcription": text,
+                "fileName": file_name,
+                "duration": duration,
+                "driveId": drive_id,
+                "groupId": group_id,
+                "folderId": folder_id,
+                "fileId": file_id,
+                "projectName": project_name
+            }
+        )
+        if response.status_code != 200:
+            return jsonify({'error': 'Failed to send request to Make'}), 500
+        
+        #return jsonify({'translated_text': translated_text})
+        return jsonify({'message': 'Request sent to Make'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+
+@app.route("/transcribe-with-assemblyai", methods=["POST"])
+@require_api_key
+def transcribe_audio_with_assemblyai():
+    if "audio" not in request.files:
+        return jsonify({"error": "No audio file provided"}), 400
+    
+    audio_file = request.files.get("audio")
+    language = request.form.get("language", "en")
+    
+    temp_path = f"temp_{audio_file.filename}"
+    audio_file.save(temp_path)
+    
+    try:
+        # Create a transcription config with speaker diarization enabled
+        config = aai.TranscriptionConfig(speaker_labels=True)
+        
+        # Create a transcriber and transcribe the audio with the config
+        transcriber = aai.Transcriber()
+        transcript = transcriber.transcribe(temp_path, config)
+        
+        # Check if transcription was successful
+        if transcript.status == aai.TranscriptStatus.error:
+            return jsonify({"error": transcript.error}), 500
+        
+        # Prepare response with full transcript and speaker information
+        response = {
+            "transcription": transcript.text,
+            "utterances": []
+        }
+        
+        # Add speaker-specific utterances
+        for utterance in transcript.utterances:
+            response["utterances"].append({
+                "speaker": utterance.speaker,
+                "text": utterance.text,
+                "start": utterance.start,
+                "end": utterance.end
+            })
+        
+        return jsonify(response)
+    finally:
+        # Clean up the temporary file
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
 
 
 if __name__ == "__main__":

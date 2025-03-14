@@ -10,6 +10,7 @@ import logging
 import ffmpeg
 from dotenv import load_dotenv
 import pandas as pd
+import requests
 import tiktoken
 from transformers import pipeline
 import re
@@ -26,10 +27,23 @@ import datetime
 from docx import Document
 import os
 from pydub import AudioSegment
+import deepl
 load_dotenv()
 
 # Constants
+ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY")
+
+if not ASSEMBLYAI_API_KEY:
+    raise ValueError("Missing AssemblyAI API key. Set it in .env file as ASSEMBLYAI_API_KEY.")
+
+ASSEMBLYAI_URL = "https://api.assemblyai.com/v2/upload"
+TRANSCRIPTION_URL = "https://api.assemblyai.com/v2/transcript"
+
+
+
+headers = {"authorization": ASSEMBLYAI_API_KEY}
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
+DEEPL_API_KEY = os.getenv("DEEPL_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 MAX_CHUNK_SIZE_MB = 20  # Max file size in MB before we chunk
 OVERLAP_SECONDS = 30  # Overlap between chunks (in seconds)
@@ -748,3 +762,5 @@ def log_audio_processing(user_code, filename, duration):
     except Exception as e:
         logging.error(f"Errore durante il salvataggio dei dati su Google Sheet: {e}")
         return None  # Don't raise the error, just return None
+
+
