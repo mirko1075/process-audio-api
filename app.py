@@ -12,7 +12,7 @@ from datetime import datetime
 import time
 from flask import g
 import requests
-from process_audio import RATE_PER_MINUTE, create_word_document, convert_to_wav, create_sentiment_details_df, create_sentiment_summary_df, delete_from_gcs, generate_multi_sheet_excel, get_audio_duration_from_form_file, load_excel_file, log_audio_processing, process_queries, split_audio_to_files, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
+from process_audio import RATE_PER_MINUTE, create_word_document, convert_to_wav, create_sentiment_details_df, create_sentiment_summary_df, delete_from_gcs, generate_multi_sheet_excel, get_audio_duration_from_form_file, load_excel_file, log_audio_processing, process_queries, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
 from sentiment_analysis import run_sentiment_analysis
 import assemblyai as aai
 
@@ -508,10 +508,10 @@ def transcribe_audio_with_assemblyai():
     if "audio" not in request.files:
         return jsonify({"error": "No audio file provided"}), 400
     audio_file = request.files.get("audio")
-    source_language = request.form.get("source_language")
+    source_language = request.form.get("sourceLanguage")
     if not source_language:
         return jsonify({'error': 'Missing source_language in request'}), 400
-    target_language = request.form.get("target_language")
+    target_language = request.form.get("targetLanguage")
     if not target_language:
         return jsonify({'error': 'Missing target_language in request'}), 400
     file_name = request.form.get("fileName")
