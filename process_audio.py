@@ -795,3 +795,31 @@ def log_audio_processing(user_code, filename, duration):
         return None  # Don't raise the error, just return None
 
 
+
+def get_usage_data(user_code, columns=None):
+    """
+    Fetches usage data from Google Sheets for a given user.
+    Filters records where 'Billed' is 'YES'.
+    Extracts only the specified columns if provided.
+
+    :param user_code: The user identifier for the sheet name.
+    :param columns: List of column names to extract (optional).
+    :return: List of dictionaries with the requested columns.
+    """
+    # Get the instance of the Spreadsheet
+    sheet = google_client.open(f'{user_code}_usage_audio_translate')
+
+    # Get the first sheet of the Spreadsheet
+    worksheet = sheet.get_worksheet(0)
+
+    # Get all records of the data
+    records = worksheet.get_all_records()
+
+    # Filter by 'Billed' === 'YES'
+    records = [record for record in records if record.get('Billed') == 'YES']
+
+    # Extract only specified columns if provided
+    if columns:
+        records = [{col: record[col] for col in columns if col in record} for record in records]
+
+    return records

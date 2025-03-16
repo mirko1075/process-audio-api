@@ -1,5 +1,5 @@
 import json
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, after_this_request, request, jsonify, send_file
 import os
 import logging
 import sys
@@ -8,11 +8,12 @@ from distutils.util import strtobool # type: ignore
 from functools import wraps
 from dotenv import load_dotenv
 import io
-from datetime import datetime
+import datetime
 import time
 from flask import g
 import requests
-from process_audio import RATE_PER_MINUTE, create_word_document, convert_to_wav, create_sentiment_details_df, create_sentiment_summary_df, delete_from_gcs, generate_multi_sheet_excel, get_audio_duration_from_form_file, load_excel_file, log_audio_processing, process_queries, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
+from pdf_generator import PDFGenerator
+from process_audio import RATE_PER_MINUTE, create_word_document, convert_to_wav, create_sentiment_details_df, create_sentiment_summary_df, delete_from_gcs, generate_multi_sheet_excel, get_audio_duration_from_form_file, get_usage_data, load_excel_file, log_audio_processing, process_queries, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
 from sentiment_analysis import run_sentiment_analysis
 import assemblyai as aai
 
@@ -582,37 +583,72 @@ def transcribe_audio_with_assemblyai():
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
-#route to split audio
-@app.route("/split-audio-endpoint", methods=["POST"])
+
+@app.route('/generate-monthly-report', methods=['POST'])
 @require_api_key
-def split_audio_endpoint():
-    """
-    API endpoint to split an audio file into chunks.
-    """
-    if "audio" not in request.files:
-        return jsonify({"error": "No audio file provided"}), 400
-    audio_file = request.files.get("audio")
-    max_duration = request.form.get("max_duration")
-    if max_duration:
-        max_duration = int(max_duration)
-    else:
-        max_duration = 19
-    temp_dir = "/tmp/temp"
-    temp_path = f"temp_{audio_file.filename}"
-    if not audio_file:
-        return jsonify({"error": "No audio file provided"}), 400
-    logging.info(f"Saving audio file to {temp_path}")
+def generate_monthly_report():
     try:
-        audio_file.save(temp_path)
-        logging.info(f"Splitting audio file: {temp_path}")
-        chunk_files = split_audio_to_files(temp_path, temp_dir, max_duration)
-        return jsonify({"chunk_files": chunk_files}), 200
+        # Fetch usage data
+        user_code = request.form.get("user_code")
+        data = get_usage_data(user_code)
+
+        # Filter data where 'Billed' is 'YES'
+        billed_data = [record for record in data if record.get('Billed') == 'YES']
+
+        # Filter data for the current month
+        current_month = datetime.datetime.now().month
+        monthly_data = [
+            record for record in billed_data
+            if datetime.datetime.strptime(record['Data e ora'], '%Y-%m-%d %H:%M:%S').month == current_month
+        ]
+
+        # Generate PDF
+        pdf_gen = PDFGenerator('Monthly Usage Report')
+        pdf_gen.add_table(monthly_data)
+        pdf_filename = f'monthly_report_{current_month}.pdf'
+        pdf_gen.save_pdf(pdf_filename)
+
+        # Schedule file deletion after sending the response
+        @after_this_request
+        def remove_file(response):
+            try:
+                os.remove(pdf_filename)
+                print(f"Deleted file: {pdf_filename}")  # Debugging
+            except Exception as e:
+                print(f"Error deleting file: {str(e)}")
+            return response
+
+        return send_file(pdf_filename, as_attachment=True)
     except Exception as e:
-        logging.error(f"Error splitting audio: {e}")
-        return jsonify({"error": str(e)}), 500
-    finally:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/generate-billing-document', methods=['POST'])
+@require_api_key
+def generate_billing_document():
+    try:
+        # Fetch usage data
+        user_code = request.form.get("user_code")
+        data = get_usage_data(user_code)
+
+        # Filter data for the current month
+        current_month = datetime.datetime.now().month
+        monthly_data = [record for record in data if datetime.datetime.strptime(record['Data e ora'], '%Y-%m-%d %H:%M:%S').month == current_month]
+
+        # Calculate total cost
+        total_cost = sum(float(record['Costo Totale (€)'].replace(',', '.')) for record in monthly_data)
+
+        # Generate PDF Invoice
+        pdf_gen = PDFGenerator('Monthly Billing Document')
+        pdf_gen.add_table(monthly_data)
+        pdf_gen.pdf.ln(10)
+        pdf_gen.pdf.cell(0, 10, f'Total Cost: €{total_cost:.2f}', 0, 1, 'R')
+        pdf_filename = f'billing_document_{current_month}.pdf'
+        pdf_gen.save_pdf(pdf_filename)
+
+        return send_file(pdf_filename, as_attachment=True)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
