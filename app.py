@@ -12,7 +12,7 @@ from datetime import datetime
 import time
 from flask import g
 import requests
-from process_audio import RATE_PER_MINUTE, create_word_document, convert_to_wav, create_sentiment_details_df, create_sentiment_summary_df, delete_from_gcs, generate_multi_sheet_excel, get_audio_duration_from_form_file, load_excel_file, log_audio_processing, process_queries, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
+from process_audio import RATE_PER_MINUTE, create_word_document, convert_to_wav, create_sentiment_details_df, create_sentiment_summary_df, delete_from_gcs, generate_multi_sheet_excel, get_audio_duration_from_form_file, load_excel_file, log_audio_processing, process_queries, split_audio_to_files, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
 from sentiment_analysis import run_sentiment_analysis
 import assemblyai as aai
 
@@ -508,7 +508,33 @@ def transcribe_audio_with_assemblyai():
     if "audio" not in request.files:
         return jsonify({"error": "No audio file provided"}), 400
     audio_file = request.files.get("audio")
-    language = request.form.get("language", "en")
+    source_language = request.form.get("source_language")
+    if not source_language:
+        return jsonify({'error': 'Missing source_language in request'}), 400
+    target_language = request.form.get("target_language")
+    if not target_language:
+        return jsonify({'error': 'Missing target_language in request'}), 400
+    file_name = request.form.get("fileName")
+    if not file_name:
+        return jsonify({'error': 'Missing file_name in request'}), 400
+    duration = request.form.get("duration")
+    if not duration:
+        return jsonify({'error': 'Missing duration in request'}), 400
+    drive_id = request.form.get("driveId")
+    if not drive_id:
+        return jsonify({'error': 'Missing driveId in request'}), 400
+    group_id = request.form.get("groupId")
+    if not group_id:
+        return jsonify({'error': 'Missing groupId in request'}), 400
+    file_id = request.form.get("fileId")
+    if not file_id:
+        return jsonify({'error': 'Missing fileId in request'}), 400
+    folder_id = request.form.get("folderId")
+    if not folder_id:
+        return jsonify({'error': 'Missing folderId in request'}), 400
+    project_name = request.form.get("projectName")
+    if not project_name:
+        return jsonify({'error': 'Missing projectName in request'}), 400
     
     temp_path = f"temp_{audio_file.filename}"
     audio_file.save(temp_path)
@@ -516,7 +542,7 @@ def transcribe_audio_with_assemblyai():
     try:
         # Configure for Chinese with Nano model and speaker diarization
         config = aai.TranscriptionConfig(
-            language_code=language,
+            language_code=source_language,
             speech_model=aai.SpeechModel.best,
             speaker_labels=True
         )
@@ -532,9 +558,58 @@ def transcribe_audio_with_assemblyai():
         for utterance in transcript.utterances:
             formatted_transcript += f"speaker{utterance.speaker}: {utterance.text}\n"
         
-        return jsonify({
-            "transcription": formatted_transcript,
-        })
+        #return jsonify({
+        #    "transcription": formatted_transcript,
+        #})
+        response = requests.post(
+            "https://hook.eu2.make.com/qcc3jfwa2stoz8xqzjvap6581hqyl2oy",
+            data={
+                "transcription": formatted_transcript,
+                "fileName": file_name,
+                "duration": duration,
+                "driveId": drive_id,
+                "groupId": group_id,
+                "folderId": folder_id,
+                "fileId": file_id,
+                "projectName": project_name,
+                "sourceLanguage": source_language
+            }
+        )
+        if response.status_code != 200:
+            return jsonify({'error': 'Failed to send request to Make'}), 500
+        return jsonify({'message': 'Request sent to Make'}), 200
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+#route to split audio
+@app.route("/split-audio-endpoint", methods=["POST"])
+@require_api_key
+def split_audio_endpoint():
+    """
+    API endpoint to split an audio file into chunks.
+    """
+    if "audio" not in request.files:
+        return jsonify({"error": "No audio file provided"}), 400
+    audio_file = request.files.get("audio")
+    max_duration = request.form.get("max_duration")
+    if max_duration:
+        max_duration = int(max_duration)
+    else:
+        max_duration = 19
+    temp_dir = "/tmp/temp"
+    temp_path = f"temp_{audio_file.filename}"
+    if not audio_file:
+        return jsonify({"error": "No audio file provided"}), 400
+    logging.info(f"Saving audio file to {temp_path}")
+    try:
+        audio_file.save(temp_path)
+        logging.info(f"Splitting audio file: {temp_path}")
+        chunk_files = split_audio_to_files(temp_path, temp_dir, max_duration)
+        return jsonify({"chunk_files": chunk_files}), 200
+    except Exception as e:
+        logging.error(f"Error splitting audio: {e}")
+        return jsonify({"error": str(e)}), 500
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
