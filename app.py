@@ -539,12 +539,16 @@ def transcribe_audio_with_assemblyai():
     
     temp_path = f"temp_{audio_file.filename}"
     audio_file.save(temp_path)
-    #if language is in  list of 
+    #if source_language is ina list use a model otherwise another one
+    if source_language in ["en", "en_au", "en_uk", "en_us", "es", "fr", "de", "it", "pt", "nl", "hi", "ja", "zh", "fi", "ko", "pl", "ru", "tr", "uk", "vi"]:
+        model = aai.SpeechModel.best
+    else:
+        model = aai.SpeechModel.nano
     try:
         # Configure for Chinese with Nano model and speaker diarization
         config = aai.TranscriptionConfig(
             language_code=source_language,
-            speech_model=aai.SpeechModel.best,
+            speech_model=model,
             speaker_labels=True
         )
         
