@@ -3,10 +3,12 @@
 from collections import defaultdict
 import html
 import io
+import json
 import os
 from pathlib import Path
 import subprocess
 import logging
+import tempfile
 import ffmpeg
 from dotenv import load_dotenv
 import pandas as pd
@@ -79,49 +81,38 @@ def split_text_at_sentences(text):
 #get audio duration from form file
 
 def get_audio_duration_from_form_file(audio_file):
-    """
-    Extracts the duration of an uploaded audio file without corruption.
-    Processes the file on disk instead of memory to avoid moov atom issues.
-    """
     try:
-        # Read file into memory
-        audio_data = io.BytesIO(audio_file.read())
+        # Save uploaded audio file temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".m4a") as temp_file:
+            temp_file.write(audio_file.read())
+            temp_file_path = temp_file.name
 
-        # Determine file extension from filename
-        file_ext = audio_file.filename.split('.')[-1].lower()
+        # Use ffprobe to get the duration
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "json",
+                temp_file_path
+            ],
+            capture_output=True,
+            text=True
+        )
 
-        # Ensure format is supported
-        supported_formats = ["mp3", "wav", "ogg", "m4a", "aac"]
-        if file_ext not in supported_formats:
-            return None, f"Unsupported file format: {file_ext}"
+        os.remove(temp_file_path)  # Clean up temp file
 
-        # Save the file to disk (to prevent FFmpeg processing errors)
-        temp_audio_path = f"temp_audio.{file_ext}"
-        with open(temp_audio_path, "wb") as f:
-            f.write(audio_data.getbuffer())
+        if result.returncode != 0:
+            return None, "FFprobe failed to analyze audio."
 
-        # If the file is m4a, convert it to wav first
-        if file_ext == "m4a":
-            converted_audio_path = "temp_audio_converted.wav"
-            try:
-                subprocess.run(["ffmpeg", "-i", temp_audio_path, converted_audio_path, "-y"], check=True)
-                os.remove(temp_audio_path)  # Delete the original to avoid conflicts
-                temp_audio_path = converted_audio_path  # Use the converted file
-            except subprocess.CalledProcessError as e:
-                return None, f"FFmpeg conversion error: {str(e)}"
+        duration_data = json.loads(result.stdout)
+        seconds = float(duration_data["format"]["duration"])
+        minutes = round(seconds / 60, 2)
 
-        # Load the audio file
-        audio = AudioSegment.from_file(temp_audio_path)
-        duration_minutes = round(len(audio) / 1000.0 / 60.0, 2)  # Convert ms to seconds rounded to 2 decimal places
-        
-        # Cleanup the temp file
-        os.remove(temp_audio_path)
-
-        return duration_minutes, None
+        return minutes, None
 
     except Exception as e:
-        print(f"Error processing audio file: {e}")
-        return None, f"Error processing file: {str(e)}"
+        return None, f"Error reading audio duration: {str(e)}"
     
 def get_audio_duration(input_file):
     cmd = [
