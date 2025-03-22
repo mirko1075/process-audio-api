@@ -419,6 +419,8 @@ def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
         for i, chunk in enumerate(text_chunks, 1):
             if chunk != "":
                 logging.info(f"Translating chunk {i} of {text_chunks_length}")
+                system_prompt = f"""You are a medical translator. You are translating medical text from {source_lang} to {target_lang}.
+                """
                 prompt = f"""
                     Translate the following text from {source_lang} to {target_lang} with extreme precision, especially in medical terminology, molecule names, test names, and ambiguous phrases. Strictly follow these guidelines:
 
@@ -469,7 +471,7 @@ def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
                 """
                 response = client.chat.completions.create(
                     model="gpt-4o",
-                    messages=[{"role": "system", "content": prompt}],
+                    messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
                     temperature=0.0
                 )
                 translated_text = response.choices[0].message.content.strip()
