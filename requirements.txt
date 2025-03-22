@@ -19,6 +19,7 @@ dataclasses-json==0.6.7
 datasets==3.2.0
 deepgram-sdk==3.9.0
 deepl==1.21.1
+deepseek-sdk==0.1.0
 deprecation==2.1.0
 dill==0.3.8
 distro==1.9.0

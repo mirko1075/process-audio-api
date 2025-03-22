@@ -405,6 +405,78 @@ def split_text_into_chunks(text, model="gpt-4o", max_tokens=1000):
 
     return chunks
 
+def split_text_into_chunks_oriental(text, language_hint="th", max_tokens=500):
+    """Optimized chunking for Asian languages with sentence boundary awareness."""
+    # Asian language sentence boundaries (add more as needed)
+    sentence_delimiters = {
+        "th": [" ", "\n", "。", "．", "ฯ", "ๆ"],
+        "zh": ["\n", "。", "，", "；", "！", "？"],
+        "ja": ["\n", "。", "、", "！", "？", "」"],
+        "default": ["\n", ".", "!", "?", "\r"]
+    }
+    
+    # Use character count approximation for Asian languages
+    if language_hint in ["th", "zh", "ja", "ko"]:
+        max_chars = max_tokens * 2  # Conservative estimate (2 chars/token)
+        delimiter_set = sentence_delimiters.get(language_hint, sentence_delimiters["default"])
+    else:
+        max_chars = max_tokens * 4  # Default estimate (4 chars/token for Western languages)
+        delimiter_set = sentence_delimiters["default"]
+
+    chunks = []
+    current_chunk = []
+    current_length = 0
+    buffer = ""
+
+    def safe_add(chunk, buffer):
+        if buffer:
+            chunk.append(buffer.strip())
+            return len(buffer)
+        return 0
+
+    for char in text:
+        buffer += char
+        current_length += 1
+        
+        # Check for sentence boundaries
+        if char in delimiter_set:
+            # Check if adding this would exceed limit
+            if (current_length + len(buffer)) > max_chars:
+                # Flush current buffer to chunk
+                chunk_length = safe_add(current_chunk, buffer)
+                current_length = chunk_length
+                buffer = ""
+                
+                # Start new chunk if over limit
+                if chunk_length >= max_chars:
+                    chunks.append("\n".join(current_chunk))
+                    current_chunk = []
+                    current_length = 0
+
+    # Add remaining text
+    safe_add(current_chunk, buffer)
+    if current_chunk:
+        chunks.append("\n".join(current_chunk))
+
+    # Final cleanup for small chunks
+    merged_chunks = []
+    current_merged = []
+    current_merged_length = 0
+    
+    for chunk in chunks:
+        chunk_length = len(chunk)
+        if current_merged_length + chunk_length <= max_chars * 1.2:
+            current_merged.append(chunk)
+            current_merged_length += chunk_length
+        else:
+            merged_chunks.append("\n".join(current_merged))
+            current_merged = [chunk]
+            current_merged_length = chunk_length
+    
+    if current_merged:
+        merged_chunks.append("\n".join(current_merged))
+
+    return merged_chunks
 
 def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
     """Translates text using OpenAI GPT-4 with the most accurate possible output."""
@@ -483,6 +555,79 @@ def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
         logging.error(f"Error during translation: {e}")
         raise
 
+import requests
+
+def translate_text_with_deepseek(text, source_lang="auto", target_lang="en"):
+    """Translates text using DeepSeek API with medical accuracy"""
+    try:
+        logging.info(f"Translating from {source_lang} to {target_lang} using DeepSeek")
+
+        # Configure your DeepSeek credentials
+        DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+        DEEPSEEK_ENDPOINT = "https://api.deepseek.com/v1/chat/completions"
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {DEEPSEEK_API_KEY}"
+        }
+
+        text_chunks = split_text_into_chunks_oriental(text, language_hint=source_lang)
+        translated_chunks = []
+        text_chunks_length = len(text_chunks)
+        logging.info(f"Translating {text_chunks_length} chunks")
+        for i, chunk in enumerate(text_chunks, 0):
+            if chunk.strip():
+                logging.info(f"Translating chunk {i} of {text_chunks_length}")
+                payload = {
+                    "model": "deepseek-chat",
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": f"""As a medical translation expert, translate this {source_lang} text to {target_lang} with:
+                                - Exact preservation of medical terminology
+                                - Natural handling of Asian language particles (ครับ/ค่ะ/-san/-sama)
+                                - Explicit [Note:] markers for ambiguous terms
+                                - Strict structural fidelity"""
+                        },
+                        {
+                            "role": "user",
+                            "content": f"""TRANSLATION TASK:
+                            {chunk}
+
+                            SPECIFIC REQUIREMENTS:
+                            1. Preserve numerical values and measurements exactly
+                            2. Handle Asian-specific:
+                            - Thai honorific particles → natural equivalents
+                            - Chinese measure words → localized properly
+                            - Japanese contextual honorifics
+                            3. Mark uncertain terms with [Assumed:...]
+                            4. Maintain original speaker labels (Speaker A/B)"""
+                        }
+                    ],
+                    "temperature": 0.1,
+                    "top_p": 0.9,
+                    "max_tokens": 4000,
+                }
+
+                response = requests.post(
+                    DEEPSEEK_ENDPOINT,
+                    headers=headers,
+                    json=payload,
+                    timeout=120
+                )
+
+                if response.status_code != 200:
+                    raise Exception(f"DeepSeek API error: {response.text}")
+
+                translated_text = response.json()['choices'][0]['message']['content']
+                translated_chunks.append(translated_text)
+                logging.info(f"Translated chunk {i} of {text_chunks_length}")
+
+        return "\n".join(translated_chunks)
+
+    except Exception as e:
+        logging.error(f"DeepSeek translation error: {e}")
+        raise
 def convert_to_wav(input_path, output_path):
     """
     Converts an audio file to WAV format using FFmpeg.

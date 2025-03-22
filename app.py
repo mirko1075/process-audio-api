@@ -13,7 +13,7 @@ import time
 from flask import g
 import requests
 from pdf_generator import PDFGenerator
-from process_audio import RATE_PER_MINUTE, create_word_document, convert_to_wav, create_sentiment_details_df, create_sentiment_summary_df, delete_from_gcs, generate_multi_sheet_excel, get_audio_duration_from_form_file, get_usage_data, load_excel_file, log_audio_processing, process_queries, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
+from process_audio import RATE_PER_MINUTE, create_word_document, convert_to_wav, create_sentiment_details_df, create_sentiment_summary_df, delete_from_gcs, generate_multi_sheet_excel, get_audio_duration_from_form_file, get_usage_data, load_excel_file, log_audio_processing, process_queries, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_deepseek, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
 from sentiment_analysis import run_sentiment_analysis
 import assemblyai as aai
 
@@ -233,6 +233,74 @@ def translate_text_with_openai_endpoint():
     except Exception as e:
         logging.error(f"Error in translate_text_with_openai: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/translate-with-deepseek', methods=['POST'])
+@require_api_key
+def translate_text_with_deepseek_endpoint():
+    """Translates text to target language using DeepSeek"""
+    try:
+        logging.info("Received request to translate text with DeepSeek")
+        text = request.form.get("text")
+        is_dev = request.form.get("isDev")
+        if not text:
+            return jsonify({'error': 'Missing text in request'}), 400
+        source_language = request.form.get("source_language")
+        if not source_language:
+            return jsonify({'error': 'Missing source_language in request'}), 400
+        target_language = request.form.get("target_language")
+        if not target_language:
+            return jsonify({'error': 'Missing target_language in request'}), 400
+        file_name = request.form.get("fileName")
+        if not file_name:
+            return jsonify({'error': 'Missing file_name in request'}), 400
+        duration = request.form.get("duration")
+        if not duration:
+            return jsonify({'error': 'Missing duration in request'}), 400
+        drive_id = request.form.get("driveId")
+        if not drive_id:
+            return jsonify({'error': 'Missing driveId in request'}), 400
+        group_id = request.form.get("groupId")
+        if not group_id:
+            return jsonify({'error': 'Missing groupId in request'}), 400
+        file_id = request.form.get("fileId")
+        if not file_id:
+            return jsonify({'error': 'Missing fileId in request'}), 400
+        folder_id = request.form.get("folderId")
+        if not folder_id:
+            return jsonify({'error': 'Missing folderId in request'}), 400
+        project_name = request.form.get("projectName")
+        if not project_name:
+            return jsonify({'error': 'Missing projectName in request'}), 400
+        translated_text = translate_text_with_deepseek(text, source_language, target_language)
+        #make an http request to  https://hook.eu2.make.com/xjxlm9ehhdn16mhtfnp77sxpgidvagqe with form-data body
+        if is_dev == "true":
+            url = "https://hook.eu2.make.com/62p3xl6a7nnr14y89i6av1bxapyvxpxn"
+        else:
+            url = "https://hook.eu2.make.com/xjxlm9ehhdn16mhtfnp77sxpgidvagqe"
+        logging.info(f"URL: {url}")
+        response = requests.post(
+            url,
+            data={
+                "translation": translated_text,
+                "transcription": text,
+                "fileName": file_name,
+                "duration": duration,
+                "driveId": drive_id,
+                "groupId": group_id,
+                "folderId": folder_id,
+                "fileId": file_id,
+                "projectName": project_name
+            }
+        )
+        if response.status_code != 200:
+            return jsonify({'error': 'Failed to send request to Make'}), 500
+        
+        #return jsonify({'translated_text': translated_text})
+        return jsonify({'message': 'Request sent to Make'}), 200
+    except Exception as e:
+        logging.error(f"Error in translate_text_with_openai: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 
 @app.route("/transcribe-google", methods=["POST"])
 def transcribe_endpoint():
