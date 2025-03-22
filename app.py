@@ -509,6 +509,7 @@ def transcribe_audio_with_assemblyai():
     if "audio" not in request.files:
         return jsonify({"error": "No audio file provided"}), 400
     audio_file = request.files.get("audio")
+    is_dev = request.form.get("isDev")
     source_language = request.form.get("sourceLanguage")
     if not source_language:
         return jsonify({'error': 'Missing source_language in request'}), 400
@@ -569,8 +570,12 @@ def transcribe_audio_with_assemblyai():
         #return jsonify({
         #    "transcription": formatted_transcript,
         #})
+        if is_dev == "true":
+            url = "https://hook.eu2.make.com/1qn49rif17gctwp53zee3xbjb6aqvbko"
+        else:
+            url = "https://hook.eu2.make.com/qcc3jfwa2stoz8xqzjvap6581hqyl2oy"
         response = requests.post(
-            "https://hook.eu2.make.com/qcc3jfwa2stoz8xqzjvap6581hqyl2oy",
+            url,
             data={
                 "transcription": formatted_transcript,
                 "fileName": file_name,
