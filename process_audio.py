@@ -452,6 +452,10 @@ def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
                     If the {source_lang} text includes colloquial, abbreviated, or commonly-used phrasing that is recognized in conversation or transcription, translate it into the most **natural, clear, and understandable** equivalent in {target_lang}—while preserving medical accuracy and context.  
                     Prefer terminology that would be readily understood by healthcare professionals or patients in a clinical setting in {target_lang}.
 
+                    **Diarization**  
+                    If the text is diarized, keep the diarization in the translation.
+                    If the text is not diarized, add diarization to the translation to indicate the speaker of the text, use Speaker A, Speaker B, etc.
+
                     **Post-Translation Verification**  
                     After producing the translation, **perform a second pass** to double-check that the result is **coherent, medically meaningful, and contextually accurate**.  
                     Look for phrases that could be made **more fluent or precise** in {target_lang}, and improve them without altering the original meaning.  
