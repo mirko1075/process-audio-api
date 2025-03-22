@@ -174,6 +174,7 @@ def translate_text_with_openai_endpoint():
     try:
         logging.info("Received request to translate text with OpenAI")
         text = request.form.get("text")
+        is_dev = request.form.get("isDev")
         if not text:
             return jsonify({'error': 'Missing text in request'}), 400
         source_language = request.form.get("source_language")
@@ -205,8 +206,12 @@ def translate_text_with_openai_endpoint():
             return jsonify({'error': 'Missing projectName in request'}), 400
         translated_text = translate_text_with_openai(text, source_language, target_language)
         #make an http request to  https://hook.eu2.make.com/xjxlm9ehhdn16mhtfnp77sxpgidvagqe with form-data body
+        if is_dev == "true":
+            url = "https://hook.eu2.make.com/62p3xl6a7nnr14y89i6av1bxapyvxpxn"
+        else:
+            url = "https://hook.eu2.make.com/xjxlm9ehhdn16mhtfnp77sxpgidvagqe"
         response = requests.post(
-            "https://hook.eu2.make.com/xjxlm9ehhdn16mhtfnp77sxpgidvagqe",
+            url,
             data={
                 "translation": translated_text,
                 "transcription": text,
