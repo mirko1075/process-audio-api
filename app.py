@@ -210,6 +210,7 @@ def translate_text_with_openai_endpoint():
             url = "https://hook.eu2.make.com/62p3xl6a7nnr14y89i6av1bxapyvxpxn"
         else:
             url = "https://hook.eu2.make.com/xjxlm9ehhdn16mhtfnp77sxpgidvagqe"
+        logging.info(f"URL: {url}")
         response = requests.post(
             url,
             data={
@@ -575,7 +576,7 @@ def transcribe_audio_with_assemblyai():
         
         transcriber = aai.Transcriber()
         transcript = transcriber.transcribe(temp_path, config)
-        print(f"TRANSCRIPT: {transcript}")
+        print(f"TRANSCRIPT: {jsonify(transcript)}")
         if transcript.status == aai.TranscriptStatus.error:
             return jsonify({"error": transcript.error}), 500
         
@@ -589,10 +590,12 @@ def transcribe_audio_with_assemblyai():
         #return jsonify({
         #    "transcription": formatted_transcript,
         #})
+        logging.info(f"FORMATTED TRANSCRIPT: {formatted_transcript}")
         if is_dev == "true":
             url = "https://hook.eu2.make.com/1qn49rif17gctwp53zee3xbjb6aqvbko"
         else:
             url = "https://hook.eu2.make.com/qcc3jfwa2stoz8xqzjvap6581hqyl2oy"
+        logging.info(f"URL: {url}")
         response = requests.post(
             url,
             data={

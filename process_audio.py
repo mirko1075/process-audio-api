@@ -422,7 +422,8 @@ def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
                 prompt = f"""
                     Translate the following text from {source_lang} to {target_lang} with extreme precision, especially in medical terminology, molecule names, test names, and ambiguous phrases. Strictly follow these guidelines:
 
-                    **Accuracy is Paramount**  
+                    **Accuracy is Paramount** 
+                    Ensure to not leave any part of the text untranslated.
                     Ensure that all medical terms, anatomical references, and disease names are translated with precision and according to standard medical terminology in {target_lang}.  
                     DO NOT assume common meanings—always verify potential medical interpretations before finalizing the translation.
 
@@ -456,8 +457,9 @@ def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
                     If the text is diarized, keep the diarization in the translation but use as Speaker names Speaker A, Speaker B, etc.
                     If the text is not diarized, add diarization to the translation to indicate the speaker of the text, use Speaker A, Speaker B, etc.
 
-                    **Post-Translation Verification**  
-                    After producing the translation, **perform a second pass** to double-check that the result is **coherent, medically meaningful, and contextually accurate**.  
+                    **Post-Translation Verification**
+                    After producing the translation, **perform a second pass**  to double check that all the input text has been translated.
+                    After producing the translation, **perform a third pass** to double-check that the result is **coherent, medically meaningful, and contextually accurate**.  
                     Look for phrases that could be made **more fluent or precise** in {target_lang}, and improve them without altering the original meaning.  
                     Prioritize clarity and alignment with common usage in medical documentation or clinical communication.
 
