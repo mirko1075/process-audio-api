@@ -550,28 +550,42 @@ def transcribe_audio_with_assemblyai():
     if source_language in ["en", "en_au", "en_uk", "en_us", "es", "fr", "de", "it", "pt", "nl", "hi", "ja", "zh", "fi", "ko", "pl", "ru", "tr", "uk", "vi"]:
         logging.info("Using best model")
         model = aai.SpeechModel.best
+        speaker_labels = True
     else:
         logging.info("Using nano model")
         model = aai.SpeechModel.nano
+        speaker_labels = False
     try:
+        logging.info(f"SPEAKER LABELS: {speaker_labels}")
+        logging.info(f"MODEL: {model}")
+        logging.info(f"SOURCE LANGUAGE: {source_language}")
+        logging.info(f"TARGET LANGUAGE: {target_language}")
+        logging.info(f"FILE NAME: {file_name}")
+        logging.info(f"DURATION: {duration}")
+        logging.info(f"DRIVE ID: {drive_id}")
+        logging.info(f"GROUP ID: {group_id}")
+        logging.info(f"FILE ID: {file_id}")
+        logging.info(f"FOLDER ID: {folder_id}")
         # Configure for Chinese with Nano model and speaker diarization
         config = aai.TranscriptionConfig(
             language_code=source_language,
             speech_model=model,
-            speaker_labels=True
+            speaker_labels=speaker_labels
         )
         
         transcriber = aai.Transcriber()
         transcript = transcriber.transcribe(temp_path, config)
-        
+        print(f"TRANSCRIPT: {transcript}")
         if transcript.status == aai.TranscriptStatus.error:
             return jsonify({"error": transcript.error}), 500
         
         # Format the transcript with speaker labels as requested
-        formatted_transcript = ""
-        for utterance in transcript.utterances:
-            formatted_transcript += f"speaker{utterance.speaker}: {utterance.text}\n"
-        
+        if speaker_labels:
+            formatted_transcript = ""
+            for utterance in transcript.utterances:
+                formatted_transcript += f"speaker{utterance.speaker}: {utterance.text}\n"
+        else:
+            formatted_transcript = transcript.text
         #return jsonify({
         #    "transcription": formatted_transcript,
         #})
