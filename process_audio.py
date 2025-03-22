@@ -453,7 +453,7 @@ def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
                     Prefer terminology that would be readily understood by healthcare professionals or patients in a clinical setting in {target_lang}.
 
                     **Diarization**  
-                    If the text is diarized, keep the diarization in the translation.
+                    If the text is diarized, keep the diarization in the translation but use as Speaker names Speaker A, Speaker B, etc.
                     If the text is not diarized, add diarization to the translation to indicate the speaker of the text, use Speaker A, Speaker B, etc.
 
                     **Post-Translation Verification**  
