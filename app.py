@@ -576,7 +576,6 @@ def transcribe_audio_with_assemblyai():
         
         transcriber = aai.Transcriber()
         transcript = transcriber.transcribe(temp_path, config)
-        print(f"TRANSCRIPT: {jsonify(transcript)}")
         if transcript.status == aai.TranscriptStatus.error:
             return jsonify({"error": transcript.error}), 500
         
