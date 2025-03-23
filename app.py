@@ -13,7 +13,7 @@ import time
 from flask import g
 import requests
 from pdf_generator import PDFGenerator
-from process_audio import RATE_PER_MINUTE, create_word_document, convert_to_wav, create_sentiment_details_df, create_sentiment_summary_df, delete_from_gcs, generate_multi_sheet_excel, get_audio_duration_from_form_file, get_usage_data, load_excel_file, log_audio_processing, process_queries, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_deepseek, translate_text_with_openai, upload_to_gcs # Ensure this uses the updated process_audio.py
+from process_audio import RATE_PER_MINUTE, create_word_document, convert_to_wav, create_sentiment_details_df, create_sentiment_summary_df, delete_from_gcs, generate_multi_sheet_excel, get_audio_duration_from_form_file, get_usage_data, load_excel_file, log_audio_processing, process_queries, transcribe_with_deepgram, transcript_with_whisper_large_files, transcribe_audio_openai, translate_text_google, translate_text_with_deepseek, translate_text_with_openai, translate_text_with_openai_oriental, upload_to_gcs # Ensure this uses the updated process_audio.py
 from sentiment_analysis import run_sentiment_analysis
 import assemblyai as aai
 
@@ -242,6 +242,7 @@ def translate_text_with_deepseek_endpoint():
         logging.info("Received request to translate text with DeepSeek")
         text = request.form.get("text")
         is_dev = request.form.get("isDev")
+        is_local = request.form.get("isLocal")
         if not text:
             return jsonify({'error': 'Missing text in request'}), 400
         source_language = request.form.get("source_language")
@@ -273,30 +274,33 @@ def translate_text_with_deepseek_endpoint():
             return jsonify({'error': 'Missing projectName in request'}), 400
         translated_text = translate_text_with_deepseek(text, source_language, target_language)
         #make an http request to  https://hook.eu2.make.com/xjxlm9ehhdn16mhtfnp77sxpgidvagqe with form-data body
-        if is_dev == "true":
-            url = "https://hook.eu2.make.com/62p3xl6a7nnr14y89i6av1bxapyvxpxn"
+        if is_local == "true":
+            return jsonify({'translated_text': translated_text})
         else:
-            url = "https://hook.eu2.make.com/xjxlm9ehhdn16mhtfnp77sxpgidvagqe"
-        logging.info(f"URL: {url}")
-        response = requests.post(
-            url,
-            data={
-                "translation": translated_text,
-                "transcription": text,
-                "fileName": file_name,
-                "duration": duration,
-                "driveId": drive_id,
-                "groupId": group_id,
-                "folderId": folder_id,
-                "fileId": file_id,
-                "projectName": project_name
-            }
-        )
-        if response.status_code != 200:
-            return jsonify({'error': 'Failed to send request to Make'}), 500
-        
-        #return jsonify({'translated_text': translated_text})
-        return jsonify({'message': 'Request sent to Make'}), 200
+            if is_dev == "true":
+                url = "https://hook.eu2.make.com/62p3xl6a7nnr14y89i6av1bxapyvxpxn"
+            else:
+                url = "https://hook.eu2.make.com/xjxlm9ehhdn16mhtfnp77sxpgidvagqe"
+            logging.info(f"URL: {url}")
+            response = requests.post(
+                url,
+                data={
+                    "translation": translated_text,
+                    "transcription": text,
+                    "fileName": file_name,
+                    "duration": duration,
+                    "driveId": drive_id,
+                    "groupId": group_id,
+                    "folderId": folder_id,
+                    "fileId": file_id,
+                    "projectName": project_name
+                }
+            )
+            if response.status_code != 200:
+                return jsonify({'error': 'Failed to send request to Make'}), 500
+            
+            #return jsonify({'translated_text': translated_text})
+            return jsonify({'message': 'Request sent to Make'}), 200
     except Exception as e:
         logging.error(f"Error in translate_text_with_openai: {str(e)}")
         return jsonify({'error': str(e)}), 500
