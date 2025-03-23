@@ -494,7 +494,7 @@ def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
                 system_prompt = f"""As a medical translation expert, translate this {source_lang} text to {target_lang} with:
                                 - Exact preservation of medical terminology
                                 - Natural handling of Asian language particles (ครับ/ค่ะ/-san/-sama)
-                                - Explicit [Note:] markers for ambiguous terms
+                                - Explicit [Note:] markers for ambiguous terms, but only if the term is ambiguous, in any case write the translation of the term.
                                 - Strict structural fidelity
                 """
                 prompt = f"""
@@ -609,7 +609,7 @@ def translate_text_with_deepseek(text, source_lang="auto", target_lang="en"):
 
                             **Handling Ambiguous or Implicit Terms**  
                             If the {source_lang} text omits crucial clarifications, assess the context and select the most medically appropriate translation in {target_lang}.  
-                            If uncertain, add a clarifying note in brackets (e.g., “elastase [assumed pancreatic elastase-1 based on context]”).  
+                            If uncertain, add a clarifying note in brackets (e.g., “elastase [assumed pancreatic elastase-1 based on context]”).  In this case, be sure to write as well the translation.
                             If a term has multiple medical interpretations, prioritize the most relevant meaning for the given context.  
                             If a term has a non-medical common meaning but is used in a medical context, translate it using the appropriate medical terminology.
 
@@ -625,7 +625,7 @@ def translate_text_with_deepseek(text, source_lang="auto", target_lang="en"):
                             If a direct translation does not exist, use the closest medical equivalent or provide a brief clarifying phrase.
 
                             **Understandability in {target_lang}**  
-                            If the {source_lang} text includes colloquial, abbreviated, or commonly-used phrasing that is recognized in conversation or transcription, translate it into the most **natural, clear, and understandable** equivalent in {target_lang}—while preserving medical accuracy and context.  
+                            If the {source_lang} text includes colloquial, abbreviated, or commonly-used phrasing that is recognized in conversation or transcription, translate it into the most **natural, clear, and understandable** equivalent in {target_lang} while preserving medical accuracy and context.  
                             Prefer terminology that would be readily understood by healthcare professionals or patients in a clinical setting in {target_lang}.
                             **SPECIFIC REQUIREMENTS:**
                             1. Preserve numerical values and measurements exactly
@@ -634,9 +634,11 @@ def translate_text_with_deepseek(text, source_lang="auto", target_lang="en"):
                             - Chinese measure words → localized properly if applies
                             - Japanese contextual honorifics if applies
                             3. Mark uncertain terms with [Assumed:...]
-                            4. Maintain original speaker labels (Speaker A/B)
-                            5. Do not add any other text or comments to the translation
-                            6. Do not add any other text or titles that are not part of the translation
+                            4. Maintain original speaker labels (Speaker A/B), use always A, B, C instead of numbers to identify the Speakers.
+                            5. **IMPORTANT** Do not add any other text or comments to the translation
+                            6. **IMPORTANT** Do not add any other text or titles that are not part of the translation, no Title, No footer, nothing more than translation and text for translated text explication.
+                            7. **IMPORTANT** Do not add any other text or comments to the translation, no Title, No footer, nothing more than translation and text for translated text explication.
+                            7. **IMPORTANT** Remove any title as **TRANSLATION TASK:**
                             
                             """
                             
