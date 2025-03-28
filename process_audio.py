@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 import logging
 import tempfile
+import unicodedata
 import ffmpeg
 from dotenv import load_dotenv
 import pandas as pd
@@ -478,11 +479,42 @@ def split_text_into_chunks_oriental(text, language_hint="th", max_tokens=500):
 
     return merged_chunks
 
-def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
+def translate_text_with_openai(text, source_lang="auto", target_lang="en", glossary_map=None, corrections_map=None):
     """Translates text using OpenAI GPT-4 with the most accurate possible output."""
     try:
         logging.info(f"Translating from {source_lang} to {target_lang} using OpenAI GPT-4 Turbo")
+        if glossary_map:
+            glossary_map = glossary_map or {}
+        else:
+            glossary_map = {}
+        if corrections_map:
+            corrections_map = corrections_map or {}
+        else:
+            corrections_map = {}
 
+        # You can optionally embed glossary terms into the system prompt or prepend examples
+        glossary_terms = "\n".join([f"- {k} → {v}" for k, v in glossary_map.items()])
+        correction_terms = "\n".join([f"- {k} → {v}" for k, v in corrections_map.items()])
+        glossary_instructions_text = ""
+        corrections_instructions_text = ""
+        if glossary_terms:
+            glossary_instructions_text = f"""
+            **Glossary (English terms must appear exactly like this):**
+            Recognize these terms in the original text and translate them exactly as they appear:
+            {glossary_terms}
+            """
+            
+        if correction_terms:
+            corrections_instructions_text = f"""
+            **Corrections (Fix these if they appear incorrectly):**
+            Ensure that these previously mis-translated terms are fixed:
+            {correction_terms}
+            """
+        instructions = ""
+        if glossary_instructions_text:
+            instructions += glossary_instructions_text + "\n"
+        if corrections_instructions_text:
+            instructions += corrections_instructions_text + "\n"
         # Split text into chunks to avoid token limits
         text_chunks = split_text_into_chunks(text)
         translated_chunks = []
@@ -491,59 +523,36 @@ def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
         for i, chunk in enumerate(text_chunks, 1):
             if chunk != "":
                 logging.info(f"Translating chunk {i} of {text_chunks_length}")
-                system_prompt = f"""As a medical translation expert, translate this {source_lang} text to {target_lang} with:
-                                - Exact preservation of medical terminology
-                                - Natural handling of Asian language particles (ครับ/ค่ะ/-san/-sama)
-                                - Explicit [Note:] markers for ambiguous terms, but only if the term is ambiguous, in any case write the translation of the term.
-                                - Strict structural fidelity
+                system_prompt = f"""
+                You are a professional medical translation agent. Your task is to translate medical conversations with extreme precision, ensuring that:
+                - All technical, pharmaceutical, and clinical terminology is preserved.
+                - Medical names (e.g., drugs, enzymes, diseases) are accurately translated using standard English nomenclature.
+                - Speaker names (e.g., Speaker A, Speaker B) are preserved or added where missing.
+
+                You MUST take into account a project glossary and correction map:
+                1. Always prioritize **known correct translations** from the glossary.
+                2. If a previously incorrect term (from correction map) is encountered, replace it with the corrected version.
+
+                Translation quality must meet standards for publication in a medical journal or regulatory documentation.
+                Do not invent or complete meaningless, malformed, or corrupted content.
+                If a portion of the text appears corrupted or nonsensical, retain it as-is or remove it. Prioritize semantic clarity and remove repeated non-words like 'ash ash ash'.
                 """
                 prompt = f"""
-                    Translate the following text from {source_lang} to {target_lang} with extreme precision, especially in medical terminology, molecule names, test names, and ambiguous phrases. Strictly follow these guidelines:
+                Please translate the following text from `{source_lang}` to `{target_lang}`.
 
-                    **Accuracy is Paramount** 
-                    Ensure to not leave any part of the text untranslated.
-                    Ensure that all medical terms, anatomical references, and disease names are translated with precision and according to standard medical terminology in {target_lang}.  
-                    DO NOT assume common meanings—always verify potential medical interpretations before finalizing the translation.
+                **Translation Objectives:**
+                - Use clinical, pharmaceutical, and diagnostic terminology correctly.
+                - Maintain the original structure and speaker order (e.g., Speaker A, Speaker B).
+                - Use the glossary below for known, validated terms. Do not paraphrase these.
+                - Apply the corrections list to fix known mistakes from past translations.
 
-                    **Molecule Names & Test Names**  
-                    Always retain the full and precise name of any molecule, biomarker, protein, enzyme, drug, or laboratory test.  
-                    If the {source_lang} term seems truncated or missing qualifiers (e.g., missing the organ/system of origin), verify the full form based on context and use the medically correct name in {target_lang}.  
-                    If a term refers to a specific diagnostic test, branded test, or proprietary medical product, explicitly use its official {target_lang} name instead of a generic translation.
-
-                    **Handling Ambiguous or Implicit Terms**  
-                    If the {source_lang} text omits crucial clarifications, assess the context and select the most medically appropriate translation in {target_lang}.  
-                    If uncertain, add a clarifying note in brackets (e.g., “elastase [assumed pancreatic elastase-1 based on context]”).  
-                    If a term has multiple medical interpretations, prioritize the most relevant meaning for the given context.  
-                    If a term has a non-medical common meaning but is used in a medical context, translate it using the appropriate medical terminology.
-
-                    **Double-Check for Proprietary or Branded Terms**  
-                    If the term could refer to a specific branded medical test, reagent, or molecule, research the correct name in {target_lang} and use it explicitly instead of a generic translation.
-
-                    **Contextual Understanding & Verification**  
-                    Read the entire passage before translating individual terms to ensure correct medical interpretation.  
-                    If necessary, restructure phrases to match the correct medical syntax in {target_lang} while preserving accuracy.
-
-                    **Standard Terminology**  
-                    Use official medical nomenclature from sources such as ICD, MedDRA, WHO, or equivalent regulatory bodies in {target_lang}.  
-                    If a direct translation does not exist, use the closest medical equivalent or provide a brief clarifying phrase.
-
-                    **Understandability in {target_lang}**  
-                    If the {source_lang} text includes colloquial, abbreviated, or commonly-used phrasing that is recognized in conversation or transcription, translate it into the most **natural, clear, and understandable** equivalent in {target_lang}—while preserving medical accuracy and context.  
-                    Prefer terminology that would be readily understood by healthcare professionals or patients in a clinical setting in {target_lang}.
-
-                    **Diarization**  
-                    If the text is diarized, keep the diarization in the translation but use as Speaker names Speaker A, Speaker B, etc.
-                    If the text is not diarized, add diarization to the translation to indicate the speaker of the text, use Speaker A, Speaker B, etc.
-
-                    **Post-Translation Verification**
-                    After producing the translation, **perform a second pass**  to double check that all the input text has been translated.
-                    After producing the translation, **perform a third pass** to double-check that the result is **coherent, medically meaningful, and contextually accurate**.  
-                    Look for phrases that could be made **more fluent or precise** in {target_lang}, and improve them without altering the original meaning.  
-                    Prioritize clarity and alignment with common usage in medical documentation or clinical communication.
-
-                    Text TO TRANSLATE:  
-                    {chunk}
-
+                {instructions}
+                **Important Output Rule:**
+                Return **only** the translated content.  
+                ❌ Do NOT add titles, headers, footers, comments, explanations, or extra formatting.  
+                ✅ Just the translated text. 
+                **Input Text:**
+                {chunk}
                 """
                 response = client.chat.completions.create(
                     model="gpt-4o",
@@ -553,13 +562,72 @@ def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
                 translated_text = response.choices[0].message.content.strip()
                 translated_chunks.append(translated_text)
 
-        return "\n".join(translated_chunks)  # Join chunks together
+
+        translation_chunks = "\n".join(translated_chunks)
+        return remove_repeated_garbage(translation_chunks)
 
     except Exception as e:
         logging.error(f"Error during translation: {e}")
         raise
 
-import requests
+def remove_repeated_garbage(text):
+    """
+    Remove repeated non-words or meaningless phrases (e.g. 'ash ash ash', 'protect o protect o').
+    Also handles broken fragments and repeated syllables.
+    """
+    # Remove repeated sequences of 2-4 words that repeat 3+ times
+    text = re.sub(r'\b((\w+\s?){1,4})\1{2,}', r'\1', text, flags=re.IGNORECASE)
+
+    # Collapse stuttered fragments like "protect o protect o protect o" or "ash ash ash"
+    text = re.sub(r'\b(\w{2,10})\b(?:\s+\1\b){2,}', r'\1', text, flags=re.IGNORECASE)
+
+    # Remove gibberish with excessive spacing or special characters (light filter)
+    text = re.sub(r'\b(?:[a-zA-Z]{1,2}\s+){4,}', '', text)
+
+    # Clean leftover whitespace
+    text = re.sub(r'\s{2,}', ' ', text)
+
+    return text.strip()
+
+def parse_glossary_and_corrections(glossary_file=None, corrections_file=None):
+    """
+    Parses uploaded Excel files.
+
+    Returns:
+    - glossary_map: a dict of glossary terms to enforce during translation, format {term: term}
+    - corrections_map: a dict of known mistranslations to fix, format {wrong: correct}
+    """
+    glossary_map = {}
+    corrections_map = {}
+
+    if glossary_file:
+        try:
+            df_glossary = pd.read_excel(glossary_file)
+            if "Term" not in df_glossary.columns:
+                raise ValueError("Glossary file must contain a 'Term' column.")
+            glossary_map = {
+                str(row["Term"]).strip(): str(row["Term"]).strip()
+                for _, row in df_glossary.iterrows()
+                if pd.notna(row["Term"])
+            }
+        except Exception as e:
+            print(f"Error parsing glossary file: {e}")
+
+    if corrections_file:
+        try:
+            df_corrections = pd.read_excel(corrections_file)
+            if not {"Wrong", "Correct"}.issubset(df_corrections.columns):
+                raise ValueError("Corrections file must contain 'Wrong' and 'Correct' columns.")
+            corrections_map = {
+                str(row["Wrong"]).strip(): str(row["Correct"]).strip()
+                for _, row in df_corrections.iterrows()
+                if pd.notna(row["Wrong"]) and pd.notna(row["Correct"])
+            }
+        except Exception as e:
+            print(f"Error parsing corrections file: {e}")
+
+    return glossary_map, corrections_map
+
 
 def translate_text_with_deepseek(text, source_lang="auto", target_lang="en"):
     """Translates text using DeepSeek API with medical accuracy"""
