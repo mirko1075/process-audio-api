@@ -43,6 +43,10 @@ ASSEMBLYAI_URL = "https://api.assemblyai.com/v2/upload"
 TRANSCRIPTION_URL = "https://api.assemblyai.com/v2/transcript"
 
 
+# Configure your DeepSeek credentials
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+DEEPSEEK_ENDPOINT = "https://api.deepseek.com/v1/chat/completions"
+
 
 headers = {"authorization": ASSEMBLYAI_API_KEY}
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
@@ -382,7 +386,7 @@ def transcribe_with_deepgram(audio_file, language="en"):
 
 
 # Tokenizer for chunking large texts
-def split_text_into_chunks(text, model="gpt-4o", max_tokens=1000):
+def split_text_into_chunks(text, model="gpt-4o", max_tokens=5000):
     """Splits text into chunks without cutting sentences."""
     enc = tiktoken.encoding_for_model(model)
     words = text.split("\n")  # Splitting by lines
@@ -564,8 +568,42 @@ def translate_text_with_openai(text, source_lang="auto", target_lang="en", gloss
 
 
         translation_chunks = "\n".join(translated_chunks)
-        return remove_repeated_garbage(translation_chunks)
+        ### Extra prompt in CHATGPT 4 to double check the coherence and flow of the translation
+        system_prompt_coherence = """
+            You are a senior medical editor reviewing the output of a translated medical conversation. Your responsibilities include:
+            Checking each sentence for completeness, clarity, coherence, and flow.
+            Identifying and correcting:
+            Repeated words, phrases, syllables (e.g., “ash ash ash”).
+            Broken or incomplete sentences.
+            Grammatically incorrect or incoherent phrases.
+            Medically or clinically incorrect statements.
+            Factually inaccurate content.
+            Comparing each sentence in the translated text against the corresponding original transcription (if provided).
+            If a translation is accurate, keep it unchanged.
+            If it is incorrect or misleading, rewrite it faithfully and clearly.
+            If a sentence is unclear or incomplete, fix or complete it.
+            Tag anything that cannot be clarified with [not clear].
+            Do your best to improve the translation even if some parts of the original are unclear. Never reject the task.
+            Do not add any other text or comments to the translation, no Title, No footer, nothing more than translation and text for translated text explication.
+        """
+        prompt_coherence = f"""
+        Please review and refine the following translated conversation. Follow the instructions provided. Maintain speaker labels and preserve medically meaningful content:
+        Original: {text}
+        Translation: {remove_repeated_garbage(translation_chunks)}
+        """
 
+        logging.info(f"Prompt coherence: {prompt_coherence}")
+        try:
+            response_coherence = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{"role": "system", "content": system_prompt_coherence}, {"role": "user", "content": prompt_coherence}],
+                temperature=0.0
+            )
+            return response_coherence.choices[0].message.content.strip()
+        except Exception as e:
+            logging.error(f"Error during coherence check: {e}")
+            return translation_chunks
+        
     except Exception as e:
         logging.error(f"Error during translation: {e}")
         raise
@@ -574,6 +612,7 @@ def remove_repeated_garbage(text):
     """
     Remove repeated non-words or meaningless phrases (e.g. 'ash ash ash', 'protect o protect o').
     Also handles broken fragments and repeated syllables.
+    Removes speaker tags (e.g., 'Speaker 1:') that have no text after them.
     """
     # Remove repeated sequences of 2-4 words that repeat 3+ times
     text = re.sub(r'\b((\w+\s?){1,4})\1{2,}', r'\1', text, flags=re.IGNORECASE)
@@ -584,10 +623,14 @@ def remove_repeated_garbage(text):
     # Remove gibberish with excessive spacing or special characters (light filter)
     text = re.sub(r'\b(?:[a-zA-Z]{1,2}\s+){4,}', '', text)
 
+    # Remove speaker labels with no text after them
+    text = re.sub(r'(Speaker \d+:)\s*(?=(Speaker \d+:|$))', '', text)
+
     # Clean leftover whitespace
     text = re.sub(r'\s{2,}', ' ', text)
 
     return text.strip()
+
 
 def parse_glossary_and_corrections(glossary_file=None, corrections_file=None):
     """
@@ -629,113 +672,111 @@ def parse_glossary_and_corrections(glossary_file=None, corrections_file=None):
     return glossary_map, corrections_map
 
 
-def translate_text_with_deepseek(text, source_lang="auto", target_lang="en"):
+def translate_text_with_deepseek(text, source_lang="auto", target_lang="en", glossary_map=None, corrections_map=None):
     """Translates text using DeepSeek API with medical accuracy"""
     try:
         logging.info(f"Translating from {source_lang} to {target_lang} using DeepSeek")
-
-        # Configure your DeepSeek credentials
-        DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
-        DEEPSEEK_ENDPOINT = "https://api.deepseek.com/v1/chat/completions"
 
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {DEEPSEEK_API_KEY}"
         }
 
-        text_chunks = split_text_into_chunks_oriental(text, language_hint=source_lang)
+        glossary_map = glossary_map or {}
+        corrections_map = corrections_map or {}
+
+        glossary_terms = "\n".join([f"- {k} → {v}" for k, v in glossary_map.items()])
+        correction_terms = "\n".join([f"- {k} → {v}" for k, v in corrections_map.items()])
+        instructions = ""
+        if glossary_terms:
+            instructions += f"**Glossary:**\n{glossary_terms}\n"
+        if correction_terms:
+            instructions += f"**Corrections:**\n{correction_terms}\n"
+
+        text_chunks = split_text_into_chunks(text)
         translated_chunks = []
-        text_chunks_length = len(text_chunks)
-        logging.info(f"Translating {text_chunks_length} chunks")
-        for i, chunk in enumerate(text_chunks, 0):
-            if chunk.strip():
-                logging.info(f"Translating chunk {i} of {text_chunks_length}")
-                payload = {
-                    "model": "deepseek-chat",
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": f"""As a medical translation expert, translate this {source_lang} text to {target_lang} with:
-                                - Exact preservation of medical terminology
-                                - Natural handling of Asian language particles (ครับ/ค่ะ/-san/-sama)
-                                - Explicit [Note:] markers for ambiguous terms
-                                - Strict structural fidelity"""
-                        },
-                        {
-                            "role": "user",
-                            "content": f"""TRANSLATION TASK:
-                            {chunk}
-                            **Accuracy is Paramount** 
-                            Ensure to not leave any part of the text untranslated.
-                            Ensure that all medical terms, anatomical references, and disease names are translated with precision and according to standard medical terminology in {target_lang}.  
-                            DO NOT assume common meanings—always verify potential medical interpretations before finalizing the translation.
 
-                            **Molecule Names & Test Names**  
-                            Always retain the full and precise name of any molecule, biomarker, protein, enzyme, drug, or laboratory test.  
-                            If the {source_lang} term seems truncated or missing qualifiers (e.g., missing the organ/system of origin), verify the full form based on context and use the medically correct name in {target_lang}.  
-                            If a term refers to a specific diagnostic test, branded test, or proprietary medical product, explicitly use its official {target_lang} name instead of a generic translation.
+        for i, chunk in enumerate(text_chunks, 1):
+            if not chunk.strip():
+                continue
 
-                            **Handling Ambiguous or Implicit Terms**  
-                            If the {source_lang} text omits crucial clarifications, assess the context and select the most medically appropriate translation in {target_lang}.  
-                            If uncertain, add a clarifying note in brackets (e.g., “elastase [assumed pancreatic elastase-1 based on context]”).  In this case, be sure to write as well the translation.
-                            If a term has multiple medical interpretations, prioritize the most relevant meaning for the given context.  
-                            If a term has a non-medical common meaning but is used in a medical context, translate it using the appropriate medical terminology.
+            logging.info(f"Translating chunk {i} of {len(text_chunks)}")
 
-                            **Double-Check for Proprietary or Branded Terms**  
-                            If the term could refer to a specific branded medical test, reagent, or molecule, research the correct name in {target_lang} and use it explicitly instead of a generic translation.
+            payload = {
+                "model": "deepseek-chat",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a professional medical translation agent. Your task is to translate medical conversations with extreme precision, ensuring:\n"
+                            "- All clinical, pharmaceutical, and diagnostic terminology is preserved.\n"
+                            "- Medical names (e.g., drugs, diseases) are accurately translated using standard English.\n"
+                            "- Speaker names (e.g., Speaker A, Speaker B) are preserved or added where missing.\n"
+                            "- Use the glossary and correction map accurately.\n"
+                            "- Do not fabricate or guess unclear content. Remove malformed or repeated garbage words."
+                        )
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""
+                                    Please translate the following text from `{source_lang}` to `{target_lang}`:
 
-                            **Contextual Understanding & Verification**  
-                            Read the entire passage before translating individual terms to ensure correct medical interpretation.  
-                            If necessary, restructure phrases to match the correct medical syntax in {target_lang} while preserving accuracy.
+                                    {instructions}
 
-                            **Standard Terminology**  
-                            Use official medical nomenclature from sources such as ICD, MedDRA, WHO, or equivalent regulatory bodies in {target_lang}.  
-                            If a direct translation does not exist, use the closest medical equivalent or provide a brief clarifying phrase.
+                                    **Important Output Rule:**
+                                    Return only the translated content without comments, titles, or formatting.
 
-                            **Understandability in {target_lang}**  
-                            If the {source_lang} text includes colloquial, abbreviated, or commonly-used phrasing that is recognized in conversation or transcription, translate it into the most **natural, clear, and understandable** equivalent in {target_lang} while preserving medical accuracy and context.  
-                            Prefer terminology that would be readily understood by healthcare professionals or patients in a clinical setting in {target_lang}.
-                            **SPECIFIC REQUIREMENTS:**
-                            1. Preserve numerical values and measurements exactly
-                            2. Handle Asian-specific:
-                            - Thai honorific particles → natural equivalents if applies
-                            - Chinese measure words → localized properly if applies
-                            - Japanese contextual honorifics if applies
-                            3. Mark uncertain terms with [Assumed:...]
-                            4. Maintain original speaker labels (Speaker A/B), use always A, B, C instead of numbers to identify the Speakers.
-                            5. **IMPORTANT** Do not add any other text or comments to the translation
-                            6. **IMPORTANT** Do not add any other text or titles that are not part of the translation, no Title, No footer, nothing more than translation and text for translated text explication.
-                            7. **IMPORTANT** Do not add any other text or comments to the translation, no Title, No footer, nothing more than translation and text for translated text explication.
-                            7. **IMPORTANT** Remove any title as **TRANSLATION TASK:**
-                            
+                                    **Input Text:**
+                                    {chunk}
+                                    """
+                    }
+                ],
+                "temperature": 0.0,
+                "top_p": 0.9,
+                "max_tokens": 4000,
+            }
+
+            response = requests.post(DEEPSEEK_ENDPOINT, headers=headers, json=payload, timeout=120)
+            if response.status_code != 200:
+                raise Exception(f"DeepSeek API error: {response.text}")
+
+            translated_text = response.json()['choices'][0]['message']['content']
+            translated_chunks.append(translated_text)
+
+        # Combine chunks and run final quality control
+        translation_output = "\n".join(translated_chunks)
+
+        system_prompt_coherence = """
+                                You are a senior medical editor. Review the translated text below for:
+                                - Repeated phrases or syllables (e.g., "ash ash ash")
+                                - Incomplete or broken sentences
+                                - Grammatical, semantic, factual, or medical errors
+                                - Clarity and clinical accuracy
+                                Compare each sentence with the original when needed. Keep correct sentences, fix unclear ones, and tag [not clear] if needed.
+                                Output only the final corrected version without any extra comments.
+                                """
+        prompt_coherence = f"""
+                            Please refine the following translated conversation for clarity and medical accuracy.
+
+                            Original: {text}
+                            Translation: {translation_output}
                             """
-                            
-                        }
-                    ],
-                    "temperature": 0.1,
-                    "top_p": 0.9,
-                    "max_tokens": 4000,
-                }
 
-                response = requests.post(
-                    DEEPSEEK_ENDPOINT,
-                    headers=headers,
-                    json=payload,
-                    timeout=120
-                )
-
-                if response.status_code != 200:
-                    raise Exception(f"DeepSeek API error: {response.text}")
-
-                translated_text = response.json()['choices'][0]['message']['content']
-                translated_chunks.append(translated_text)
-                logging.info(f"Translated chunk {i} of {text_chunks_length}")
-
-        return "\n".join(translated_chunks)
+        response_coherence = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt_coherence},
+                {"role": "user", "content": prompt_coherence}
+            ],
+            temperature=0.0
+        )
+        return response_coherence.choices[0].message.content.strip()
 
     except Exception as e:
-        logging.error(f"DeepSeek translation error: {e}")
+        logging.error(f"Error during translation: {e}")
         raise
+
+
 def convert_to_wav(input_path, output_path):
     """
     Converts an audio file to WAV format using FFmpeg.

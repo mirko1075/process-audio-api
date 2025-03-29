@@ -94,8 +94,8 @@ def transcribe_and_translate():
         if translate and translation_model not in ["google", "openai"]:
             return jsonify({"error": "Invalid translation model"}), 400
 
-        language = request.form.get("language", "en")
-        target_language = request.form.get("target_language", "en")
+        language = request.form.get("sourceLanguage", "en")
+        target_language = request.form.get("targetLanguage", "en")
 
         if not audio_file:
             return jsonify({"error": "No file uploaded"}), 400
@@ -287,8 +287,15 @@ def translate_text_with_deepseek_endpoint():
     project_name = request.form.get("projectName")
     if not project_name:
         return jsonify({'error': 'Missing projectName in request'}), 400
+            
+    glossary_file = request.files.get("glossaryFile")
+    corrections_file = request.files.get("correctionsFile")
+    glossary_map, corrections_map = parse_glossary_and_corrections(glossary_file, corrections_file)
     try:
-        translated_text = translate_text_with_deepseek(text, source_language, target_language)
+        if glossary_file:
+            translated_text = translate_text_with_deepseek(text, source_language, target_language, glossary_map, corrections_map)
+        else:
+            translated_text = translate_text_with_deepseek(text, source_language, target_language)
         #make an http request to  https://hook.eu2.make.com/xjxlm9ehhdn16mhtfnp77sxpgidvagqe with form-data body
         if is_local == "true":
             return jsonify({'translated_text': translated_text})
@@ -600,6 +607,7 @@ def transcribe_audio_with_assemblyai():
         return jsonify({"error": "No audio file provided"}), 400
     audio_file = request.files.get("audio")
     is_dev = request.form.get("isDev")
+    is_local = request.form.get("isLocal")
     source_language = request.form.get("sourceLanguage")
     if not source_language:
         return jsonify({'error': 'Missing source_language in request'}), 400
@@ -674,6 +682,8 @@ def transcribe_audio_with_assemblyai():
         #    "transcription": formatted_transcript,
         #})
         logging.info(f"FORMATTED TRANSCRIPT: {formatted_transcript}")
+        if is_local == "true":
+            return jsonify({'transcription': formatted_transcript})
         if is_dev == "true":
             url = "https://hook.eu2.make.com/1qn49rif17gctwp53zee3xbjb6aqvbko"
         else:
