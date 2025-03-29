@@ -11,6 +11,7 @@ import logging
 import tempfile
 import ffmpeg
 from dotenv import load_dotenv
+import httpx
 import pandas as pd
 import requests
 import tiktoken
@@ -369,8 +370,8 @@ def transcribe_with_deepgram(audio_file, language="en"):
             paragraphs=True,
             utterances=True
         )
-
-        response = deepgram.listen.prerecorded.v("1").transcribe_file(payload, options, timeout=240)
+        timeout = httpx.Timeout(300.0, connect=10.0)
+        response = deepgram.listen.prerecorded.v("1").transcribe_file(payload, options, timeout=timeout)
         return format_transcript(response)
 
     except Exception as e:
