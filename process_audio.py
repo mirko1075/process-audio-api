@@ -367,7 +367,7 @@ def transcribe_with_deepgram(audio_file, language="en"):
             model="whisper",
             smart_format=True,
             language=language,
-            paragraphs=True,
+            dictation=True,
             utterances=True
         )
         timeout = httpx.Timeout(timeout=600.0, connect=60.0, read=600.0, write=600.0)
