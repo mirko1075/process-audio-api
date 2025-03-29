@@ -121,6 +121,37 @@ def transcribe_and_translate():
         logging.error(f"Error in transcribe_and_translate: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+
+@app.route('/transcribe-with-deepgram-whisper', methods=['POST'])
+@require_api_key
+def transcribe_with_deepgram_whisper():
+    """Handles audio transcription with Deepgram and Whisper"""
+    try:
+        logging.info("Received request to transcribe and translate audio with Deepgram and Whisper")
+        
+        audio_file = request.files.get("audio")
+
+        language = request.form.get("language", "en")
+
+        if not audio_file:
+            return jsonify({"error": "No file uploaded"}), 400
+
+        # Process and transcribe audio
+        transcription_response = transcribe_with_deepgram(audio_file, language)
+        logging.info(f"TRANSCRIPTION RESPONSE: {transcription_response}")
+        formatted_transcript_array = transcription_response["formatted_transcript_array"]
+        transcript = transcription_response["transcript"]
+
+        # Return JSON response
+        return jsonify({
+            "formatted_transcript_array": formatted_transcript_array,
+            "transcript": transcript,
+        })
+
+    except Exception as e:
+        logging.error(f"Error in transcribe_with_deepgram_whisper: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/get-audio-duration", methods=["POST"])
 @require_api_key
 def get_audio_duration_endpoint():
@@ -175,6 +206,7 @@ def translate_text_with_openai_endpoint():
         logging.info("Received request to translate text with OpenAI")
         text = request.form.get("text")
         is_dev = request.form.get("isDev")
+        is_local = request.form.get("isLocal")
         if not text:
             return jsonify({'error': 'Missing text in request'}), 400
         source_language = request.form.get("source_language")
@@ -206,6 +238,8 @@ def translate_text_with_openai_endpoint():
             return jsonify({'error': 'Missing projectName in request'}), 400
         translated_text = translate_text_with_openai(text, source_language, target_language)
         #make an http request to  https://hook.eu2.make.com/xjxlm9ehhdn16mhtfnp77sxpgidvagqe with form-data body
+        if is_local == "true":
+            return jsonify({'translated_text': translated_text})
         if is_dev == "true":
             url = "https://hook.eu2.make.com/62p3xl6a7nnr14y89i6av1bxapyvxpxn"
         else:

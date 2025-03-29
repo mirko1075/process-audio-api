@@ -363,13 +363,11 @@ def transcribe_with_deepgram(audio_file, language="en"):
         payload: FileSource = {"buffer": buffer_data}
 
         options = PrerecordedOptions(
-            model="nova-2",
+            model="whisper",
             smart_format=True,
             language=language,
-            diarize=True,
-            dictation=True,
-            filler_words=True,
-            utterances=True,
+            paragraphs=True,
+            utterances=True
         )
 
         response = deepgram.listen.prerecorded.v("1").transcribe_file(payload, options, timeout=240)
@@ -381,7 +379,7 @@ def transcribe_with_deepgram(audio_file, language="en"):
 
 
 # Tokenizer for chunking large texts
-def split_text_into_chunks(text, model="gpt-4o", max_tokens=1000):
+def split_text_into_chunks(text, model="gpt-4o", max_tokens=500):
     """Splits text into chunks without cutting sentences."""
     enc = tiktoken.encoding_for_model(model)
     words = text.split("\n")  # Splitting by lines
@@ -491,53 +489,29 @@ def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
         for i, chunk in enumerate(text_chunks, 1):
             if chunk != "":
                 logging.info(f"Translating chunk {i} of {text_chunks_length}")
-                system_prompt = f"""As a medical translation expert, translate this {source_lang} text to {target_lang} with:
-                                - Exact preservation of medical terminology
-                                - Strict structural fidelity
+                system_prompt = f"""You are a professional medical translator specialized in translating Thai to English. You are also an expert in medical terminology, treatments, and pharmacological terms. You are helping translate transcriptions of interviews between doctors and patients in the medical research field.
+
+                You must:
+                - Translate all content accurately from Thai to English.
+                - Ensure correct use of clinical, pharmaceutical, and disease-specific terms. Avoid general terms if precise medical equivalents exist.
+                - Perform speaker diarization by identifying from context who is speaking (either "Interviewer" or "Interviewee").
+                - Maintain paragraph grouping: if the same speaker continues for multiple sentences, their text must remain under the same speaker label.
+                - Maintain the logical structure of a professional interview, avoid adding, omitting, or altering intent or meaning.
+                - Format the translation cleanly with alternating speaker blocks starting with "Interviewer:" or "Interviewee:" followed by their respective content.
+
+                Do not explain your reasoning. Your response must only contain the clean translated dialogue.
+                Do not add extra text at the beginning nor at the end. No titles, no footers, no comments, no explanations, no notes, no nothing.
                 """
                 prompt = f"""
-                    Translate the following text from {source_lang} to {target_lang} with extreme precision, especially in medical terminology, molecule names, test names, and ambiguous phrases. Strictly follow these guidelines:
+                    Please translate the following medical interview transcript from Thai to English.
 
-                    **Accuracy is Paramount** 
-                    Ensure to not leave any part of the text untranslated.
-                    Ensure that all medical terms, anatomical references, and disease names are translated with precision and according to standard medical terminology in {target_lang}.  
-                    DO NOT assume common meanings—always verify potential medical interpretations before finalizing the translation.
+                    Follow these rules:
+                    - Identify who is speaking: Interviewer or Interviewee.
+                    - Maintain correct speaker attribution and group multiple sentences from the same speaker into a single block.
+                    - Use medically precise English language.
+                    - Do not skip or summarize. Translate all parts fully.
 
-                    **Molecule Names & Test Names**  
-                    Always retain the full and precise name of any molecule, biomarker, protein, enzyme, drug, or laboratory test.  
-                    If the {source_lang} term seems truncated or missing qualifiers (e.g., missing the organ/system of origin), verify the full form based on context and use the medically correct name in {target_lang}.  
-                    If a term refers to a specific diagnostic test, branded test, or proprietary medical product, explicitly use its official {target_lang} name instead of a generic translation.
-
-                    **Handling Ambiguous or Implicit Terms**  
-                    If the {source_lang} text omits crucial clarifications, assess the context and select the most medically appropriate translation in {target_lang}.  
-                    If uncertain, add a clarifying note in brackets (e.g., “elastase [assumed pancreatic elastase-1 based on context]”).  
-                    If a term has multiple medical interpretations, prioritize the most relevant meaning for the given context.  
-                    If a term has a non-medical common meaning but is used in a medical context, translate it using the appropriate medical terminology.
-
-                    **Double-Check for Proprietary or Branded Terms**  
-                    If the term could refer to a specific branded medical test, reagent, or molecule, research the correct name in {target_lang} and use it explicitly instead of a generic translation.
-
-                    **Contextual Understanding & Verification**  
-                    Read the entire passage before translating individual terms to ensure correct medical interpretation.  
-                    If necessary, restructure phrases to match the correct medical syntax in {target_lang} while preserving accuracy.
-
-                    **Standard Terminology**  
-                    Use official medical nomenclature from sources such as ICD, MedDRA, WHO, or equivalent regulatory bodies in {target_lang}.  
-                    If a direct translation does not exist, use the closest medical equivalent or provide a brief clarifying phrase.
-
-                    **Understandability in {target_lang}**  
-                    If the {source_lang} text includes colloquial, abbreviated, or commonly-used phrasing that is recognized in conversation or transcription, translate it into the most **natural, clear, and understandable** equivalent in {target_lang}—while preserving medical accuracy and context.  
-                    Prefer terminology that would be readily understood by healthcare professionals or patients in a clinical setting in {target_lang}.
-
-                    **Diarization**  
-                    If the text is diarized, keep the diarization in the translation but use as Speaker names Speaker A, Speaker B, etc.
-                    If the text is not diarized, add diarization to the translation to indicate the speaker of the text, use Speaker A, Speaker B, etc.
-
-                    **Post-Translation Verification**
-                    After producing the translation, **perform a second pass**  to double check that all the input text has been translated.
-                    After producing the translation, **perform a third pass** to double-check that the result is **coherent, medically meaningful, and contextually accurate**.  
-                    Look for phrases that could be made **more fluent or precise** in {target_lang}, and improve them without altering the original meaning.  
-                    Prioritize clarity and alignment with common usage in medical documentation or clinical communication.
+                    Thai transcript:
 
                     Text TO TRANSLATE:  
                     {chunk}
