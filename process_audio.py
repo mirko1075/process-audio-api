@@ -372,13 +372,16 @@ def transcribe_with_deepgram(audio_file, language="en", transcript_model="whispe
             paragraphs=True,
         )
         timeout = httpx.Timeout(
-            connect=60.0,
-            read=600.0,
-            write=600.0,
-            pool=60.0  # NEW: how long to wait to get a connection from the pool
+            connect=60.0,   # 1 min to establish connection
+            read=1800.0,    # 30 min to read full response
+            write=600.0,    # 10 min to upload data
+            pool=60.0       # 1 min connection pool timeout
         )
+        start = time.time()
+        logging.info(f"Started Deepgram transcription at {datetime.now()}")
         response = deepgram.listen.prerecorded.v("1").transcribe_file(payload, options, timeout=timeout)
-        print(f"response: {response}\n\n")
+        end = time.time()
+        logging.info(f"Completed transcription in {end - start:.2f} seconds")
         return format_transcript(response)
 
     except Exception as e:
