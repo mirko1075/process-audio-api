@@ -89,6 +89,7 @@ def transcribe_and_translate():
         
         audio_file = request.files.get("audio")
         translate = strtobool(request.form.get("translate", 'false'))
+        transcript_model = request.form.get("transcript_model", "deepgram")
         translation_model = request.form.get("translation_model", "google")
         #accept google or openai
         if translate and translation_model not in ["google", "openai"]:
@@ -101,7 +102,7 @@ def transcribe_and_translate():
             return jsonify({"error": "No file uploaded"}), 400
 
         # Process and transcribe audio
-        transcription_response = transcribe_with_deepgram(audio_file, language)
+        transcription_response = transcribe_with_deepgram(audio_file, language, transcript_model)
         logging.info(f"TRANSCRIPTION RESPONSE: {transcription_response}")
         formatted_transcript_array = transcription_response["formatted_transcript_array"]
         transcript = transcription_response["transcript"]

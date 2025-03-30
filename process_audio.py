@@ -353,7 +353,7 @@ def format_transcript(response):
         logging.error(f"Error formatting transcript: {e}")
         raise
 
-def transcribe_with_deepgram(audio_file, language="en"):
+def transcribe_with_deepgram(audio_file, language="en", transcript_model="whisper"):
     """Processes and transcribes an uploaded audio file"""
     try:
         logging.info(f"Processing audio file: {audio_file.filename}")
@@ -364,12 +364,12 @@ def transcribe_with_deepgram(audio_file, language="en"):
         payload: FileSource = {"buffer": buffer_data}
 
         options = PrerecordedOptions(
-            model="whisper",
+            model=transcript_model,
             smart_format=True,
             language=language,
-            dictation=True,
-            filler_words=True,
             utterances=True,
+            punctuate=True,
+            paragraphs=True,
         )
         timeout = httpx.Timeout(timeout=600.0, connect=60.0, read=600.0, write=600.0)
 
@@ -493,7 +493,7 @@ def translate_text_with_openai(text, source_lang="auto", target_lang="en"):
         for i, chunk in enumerate(text_chunks, 1):
             if chunk != "":
                 logging.info(f"Translating chunk {i} of {text_chunks_length}")
-                system_prompt = f"""You are a professional medical translator specialized in translating Thai to English. You are also an expert in medical terminology, treatments, and pharmacological terms. You are helping translate transcriptions of interviews between doctors and patients in the medical research field.
+                system_prompt = f"""You are a professional medical translator specialized in translating {source_lang} to English. You are also an expert in medical terminology, treatments, and pharmacological terms. You are helping translate transcriptions of interviews between doctors and patients in the medical research field.
 
                 You must:
                 - Translate all content accurately from Thai to English.
