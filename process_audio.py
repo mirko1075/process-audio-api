@@ -810,6 +810,7 @@ def transcript_with_whisper_large_files(file_path, temp_dir, language):
             logging.debug(f"Split into {len(chunk_files)} chunks")
 
             combined_texts = []
+            logging.info(f"Chunk files: {len(chunk_files)}")
             for i, chunk in enumerate(chunk_files, 1):
                 logging.debug(f"Processing chunk {i}/{len(chunk_files)}: {chunk}")
                 text = transcribe_audio_with_whisper(chunk, language)  # Use the Whisper API
