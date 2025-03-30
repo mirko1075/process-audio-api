@@ -368,11 +368,13 @@ def transcribe_with_deepgram(audio_file, language="en"):
             smart_format=True,
             language=language,
             dictation=True,
-            utterances=True
+            filler_words=True,
+            utterances=True,
         )
         timeout = httpx.Timeout(timeout=600.0, connect=60.0, read=600.0, write=600.0)
 
         response = deepgram.listen.prerecorded.v("1").transcribe_file(payload, options, timeout=timeout)
+        print(f"response: {response}\n\n")
         return format_transcript(response)
 
     except Exception as e:
