@@ -122,6 +122,72 @@ def transcribe_and_translate():
         logging.error(f"Error in transcribe_and_translate: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+           
+@app.route("/transcript-with-whisper", methods=["POST"])
+@require_api_key
+def transcript_with_whisper_endpoint():
+    """
+    API endpoint to process and transcribe audio files using OpenAI Whisper.
+    """
+    logging.debug("Received request to process audio")
+    audio_file = request.files.get("audio")
+    language = request.form.get("language", "en")
+
+    if not audio_file:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    input_path = os.path.join("/tmp", audio_file.filename)
+    wav_path = os.path.join("/tmp", f"{os.path.splitext(audio_file.filename)[0]}.wav")
+
+    try:
+        # Save the uploaded file
+        logging.debug(f"Saving uploaded file to {input_path}")
+        audio_file.save(input_path)
+
+        # Convert to WAV if not already a WAV file
+        if not input_path.lower().endswith(".wav"):
+            logging.debug(f"Converting {input_path} to WAV format")
+            convert_to_wav(input_path, wav_path)
+        else:
+            wav_path = input_path  # If already a WAV file, use as is
+            logging.debug(f"Using existing WAV file: {wav_path}")
+            
+        # Process the WAV file using OpenAI Whisper API
+        logging.debug(f"Transcripting WAV file whith whisper: {wav_path}")
+        whisper_transcription = transcript_with_whisper_large_files(wav_path, "/tmp/temp", language)  # Ensure this uses the updated process_file
+
+        # Check if transcription is valid
+        if not whisper_transcription or not isinstance(whisper_transcription, str):
+            logging.error("Transcription failed or returned invalid data")
+            return jsonify({"error": "Transcription failed or returned invalid data"}), 500
+        logging.debug(f"Whisper transcription: {whisper_transcription}")
+
+
+        # Clean up uploaded and converted files
+        if input_path != wav_path:  # Only delete input if converted
+            logging.debug(f"Removing uploaded file: {input_path}")
+            os.remove(input_path)
+        logging.debug(f"Removing WAV file: {wav_path}")
+        os.remove(wav_path)
+
+        logging.info("Processing complete, returning transcription")
+
+
+        result = {"message": "Processing complete", "transcription": whisper_transcription}
+        return jsonify(result)
+
+    except Exception as e:
+        logging.error(f"Error processing audio: {e}")
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        # Clean up temporary files
+        temp_dir = "/tmp/temp"
+        if os.path.exists(temp_dir):
+            logging.debug(f"Cleaning up temporary files in {temp_dir}")
+            for file in os.listdir(temp_dir):
+                os.remove(os.path.join(temp_dir, file))
+
 
 @app.route('/transcribe-with-deepgram-whisper', methods=['POST'])
 @require_api_key
@@ -153,51 +219,114 @@ def transcribe_with_deepgram_whisper():
         logging.error(f"Error in transcribe_with_deepgram_whisper: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route("/get-audio-duration", methods=["POST"])
-@require_api_key
-def get_audio_duration_endpoint():
-    """
-    Endpoint to upload an audio file and return its duration.
-    """
-    audio_file = request.files.get("audio")
 
-    if not audio_file:
+@app.route("/transcribe-with-assemblyai", methods=["POST"])
+@require_api_key
+def transcribe_audio_with_assemblyai():
+    if "audio" not in request.files:
         return jsonify({"error": "No audio file provided"}), 400
-
-    duration, error = get_audio_duration_from_form_file(audio_file)
-
-    if error:
-        return jsonify({"error": error}), 400
-
-    return jsonify({"message": "Audio processed successfully", "duration_minutes": duration}), 200
-
-
-@app.route('/translate-with-google', methods=['POST'])
-@require_api_key
-def translate_text_endpoint():
-    """Translates text to the target language"""
+    audio_file = request.files.get("audio")
+    is_dev = request.form.get("isDev")
+    source_language = request.form.get("sourceLanguage")
+    if not source_language:
+        return jsonify({'error': 'Missing source_language in request'}), 400
+    target_language = request.form.get("targetLanguage")
+    if not target_language:
+        return jsonify({'error': 'Missing target_language in request'}), 400
+    file_name = request.form.get("fileName")
+    if not file_name:
+        return jsonify({'error': 'Missing file_name in request'}), 400
+    duration = request.form.get("duration")
+    if not duration:
+        return jsonify({'error': 'Missing duration in request'}), 400
+    drive_id = request.form.get("driveId")
+    if not drive_id:
+        return jsonify({'error': 'Missing driveId in request'}), 400
+    group_id = request.form.get("groupId")
+    if not group_id:
+        return jsonify({'error': 'Missing groupId in request'}), 400
+    file_id = request.form.get("fileId")
+    if not file_id:
+        return jsonify({'error': 'Missing fileId in request'}), 400
+    folder_id = request.form.get("folderId")
+    if not folder_id:
+        return jsonify({'error': 'Missing folderId in request'}), 400
+    project_name = request.form.get("projectName")
+    if not project_name:
+        return jsonify({'error': 'Missing projectName in request'}), 400
+    
+    temp_path = f"temp_{audio_file.filename}"
+    audio_file.save(temp_path)
+    logging.info(f"SOURCE LANGUAGE: {source_language}")
+    #if source_language is ina list use a model otherwise another one
+    if source_language in ["en", "en_au", "en_uk", "en_us", "es", "fr", "de", "it", "pt", "nl", "hi", "ja", "zh", "fi", "ko", "pl", "ru", "tr", "uk", "vi"]:
+        logging.info("Using best model")
+        model = aai.SpeechModel.best
+        speaker_labels = True
+    else:
+        logging.info("Using nano model")
+        model = aai.SpeechModel.nano
+        speaker_labels = False
     try:
-        logging.info("Received request to translate text with Google")
-
-        data = request.get_json()
-        if not data or "text" not in data or "target_language" not in data:
-            return jsonify({'error': 'Missing text or target_language in request'}), 400
+        logging.info(f"SPEAKER LABELS: {speaker_labels}")
+        logging.info(f"MODEL: {model}")
+        logging.info(f"SOURCE LANGUAGE: {source_language}")
+        logging.info(f"TARGET LANGUAGE: {target_language}")
+        logging.info(f"FILE NAME: {file_name}")
+        logging.info(f"DURATION: {duration}")
+        logging.info(f"DRIVE ID: {drive_id}")
+        logging.info(f"GROUP ID: {group_id}")
+        logging.info(f"FILE ID: {file_id}")
+        logging.info(f"FOLDER ID: {folder_id}")
+        # Configure for Chinese with Nano model and speaker diarization
+        config = aai.TranscriptionConfig(
+            language_code=source_language,
+            speech_model=model,
+            speaker_labels=speaker_labels
+        )
         
-        text = data['text']
-        target_language = data['target_language'] or "en"
+        transcriber = aai.Transcriber()
+        transcript = transcriber.transcribe(temp_path, config)
+        if transcript.status == aai.TranscriptStatus.error:
+            return jsonify({"error": transcript.error}), 500
+        
+        # Format the transcript with speaker labels as requested
+        if speaker_labels:
+            formatted_transcript = ""
+            for utterance in transcript.utterances:
+                formatted_transcript += f"speaker{utterance.speaker}: {utterance.text}\n"
+        else:
+            formatted_transcript = transcript.text
+        #return jsonify({
+        #    "transcription": formatted_transcript,
+        #})
+        logging.info(f"FORMATTED TRANSCRIPT: {formatted_transcript}")
+        if is_dev == "true":
+            url = "https://hook.eu2.make.com/1qn49rif17gctwp53zee3xbjb6aqvbko"
+        else:
+            url = "https://hook.eu2.make.com/qcc3jfwa2stoz8xqzjvap6581hqyl2oy"
+        logging.info(f"URL: {url}")
+        response = requests.post(
+            url,
+            data={
+                "transcription": formatted_transcript,
+                "fileName": file_name,
+                "duration": duration,
+                "driveId": drive_id,
+                "groupId": group_id,
+                "folderId": folder_id,
+                "fileId": file_id,
+                "projectName": project_name,
+                "sourceLanguage": source_language
+            }
+        )
+        if response.status_code != 200:
+            return jsonify({'error': 'Failed to send request to Make'}), 500
+        return jsonify({'message': 'Request sent to Make'}), 200
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
 
-        # Ensure text is a list
-        if not isinstance(text, list):
-            text = [text]
-
-        translated_text_response = translate_text_google(text, target_language)
-        translated_text = translated_text_response["joined_translated_text"]
-        translated_text_list = translated_text_response["translated_text_list"]
-        return jsonify({'translated_text': translated_text, 'translated_text_list': translated_text_list})
-
-    except Exception as e:
-        logging.error(f"Error in translate_text: {str(e)}")
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/translate-with-openai', methods=['POST'])
 @require_api_key
@@ -341,107 +470,8 @@ def translate_text_with_deepseek_endpoint():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route("/transcribe-google", methods=["POST"])
-def transcribe_endpoint():
-    """API endpoint to transcribe an audio file."""
-    try:
-        file = request.files['file']
-        gcs_uri = request.form.get("gcs_uri")  # Optional GCS URI
-        language_code = request.form.get("language", "en-US")
-        temp_path = ''
-        if not file and not gcs_uri:
-            return jsonify({"error": "No file or GCS URI provided"}), 400
 
-        if file:
-            # Save the file temporarily
-            temp_path = f"/tmp/{file.filename}"
-            file.save(temp_path)
-
-            # Upload to GCS
-            bucket_name = "your-gcs-bucket"  # Replace with your actual bucket
-            gcs_uri = upload_to_gcs(temp_path, bucket_name, file.filename)
-
-        # Perform transcription
-        transcription = transcribe_audio_openai(gcs_uri, language_code)
-        return jsonify({"transcription": transcription})
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    
-    finally:
-        # Clean up temporary files
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-            #delete from bucket
-            if gcs_uri:
-                delete_from_gcs(gcs_uri)
-
-           
-@app.route("/transcript-with-whisper", methods=["POST"])
-@require_api_key
-def transcript_with_whisper_endpoint():
-    """
-    API endpoint to process and transcribe audio files using OpenAI Whisper.
-    """
-    logging.debug("Received request to process audio")
-    audio_file = request.files.get("audio")
-    language = request.form.get("language", "en")
-
-    if not audio_file:
-        return jsonify({"error": "No file uploaded"}), 400
-
-    input_path = os.path.join("/tmp", audio_file.filename)
-    wav_path = os.path.join("/tmp", f"{os.path.splitext(audio_file.filename)[0]}.wav")
-
-    try:
-        # Save the uploaded file
-        logging.debug(f"Saving uploaded file to {input_path}")
-        audio_file.save(input_path)
-
-        # Convert to WAV if not already a WAV file
-        if not input_path.lower().endswith(".wav"):
-            logging.debug(f"Converting {input_path} to WAV format")
-            convert_to_wav(input_path, wav_path)
-        else:
-            wav_path = input_path  # If already a WAV file, use as is
-            logging.debug(f"Using existing WAV file: {wav_path}")
-            
-        # Process the WAV file using OpenAI Whisper API
-        logging.debug(f"Transcripting WAV file whith whisper: {wav_path}")
-        whisper_transcription = transcript_with_whisper_large_files(wav_path, "/tmp/temp", language)  # Ensure this uses the updated process_file
-
-        # Check if transcription is valid
-        if not whisper_transcription or not isinstance(whisper_transcription, str):
-            logging.error("Transcription failed or returned invalid data")
-            return jsonify({"error": "Transcription failed or returned invalid data"}), 500
-        logging.debug(f"Whisper transcription: {whisper_transcription}")
-
-
-        # Clean up uploaded and converted files
-        if input_path != wav_path:  # Only delete input if converted
-            logging.debug(f"Removing uploaded file: {input_path}")
-            os.remove(input_path)
-        logging.debug(f"Removing WAV file: {wav_path}")
-        os.remove(wav_path)
-
-        logging.info("Processing complete, returning transcription")
-
-
-        result = {"message": "Processing complete", "transcription": whisper_transcription}
-        return jsonify(result)
-
-    except Exception as e:
-        logging.error(f"Error processing audio: {e}")
-        return jsonify({"error": str(e)}), 500
-
-    finally:
-        # Clean up temporary files
-        temp_dir = "/tmp/temp"
-        if os.path.exists(temp_dir):
-            logging.debug(f"Cleaning up temporary files in {temp_dir}")
-            for file in os.listdir(temp_dir):
-                os.remove(os.path.join(temp_dir, file))
-
+#############DOCUMENTS#############
 
 @app.route("/text-to-file", methods=["POST"])
 def text_to_file():
@@ -486,40 +516,7 @@ def text_to_file():
         logging.error(f"Error creating text file: {e}")
         return jsonify({"error": str(e)}), 500
     
-@app.route('/sentiment-analysis', methods=['POST'])
-@require_api_key
-def analyze_sentiment_and_queries():
-    try:
-        excel_file = request.files.get('file')
-        text_to_analyze = request.form.get('text')
-        
-        if not excel_file:
-            return jsonify({"error": "No Excel file provided."}), 400
-        if not text_to_analyze:
-            return jsonify({"error": "No text provided for analysis."}), 400
 
-        # Process queries (Sheet 1)
-        df_queries = load_excel_file(excel_file)
-        responses = process_queries(df_queries, text_to_analyze)
-        df_queries['Response'] = responses
-
-        # Run sentiment analysis using the Hospital_Reviews model
-        sentiment_results = run_sentiment_analysis(text_to_analyze)
-        df_sentiment_details = create_sentiment_details_df(sentiment_results)
-        df_sentiment_summary = create_sentiment_summary_df(df_sentiment_details)
-
-        # Generate the multi-sheet Excel file
-        output = generate_multi_sheet_excel(df_queries, df_sentiment_details, df_sentiment_summary)
-        return send_file(
-            output,
-            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            as_attachment=True,
-            download_name="analyzed_data.xlsx"
-        )
-    except Exception as e:
-        logging.error(f"Error in analyze_sentiment_and_queries endpoint: {e}")
-        return jsonify({"error": str(e)}), 500
-    
 @app.route('/generate-excel', methods=['POST'])
 @require_api_key
 def generate_excel():
@@ -582,6 +579,27 @@ def generate_word():
         return jsonify({"error": str(e)}), 500
 
 
+###########REPORTING###########
+
+@app.route("/get-audio-duration", methods=["POST"])
+@require_api_key
+def get_audio_duration_endpoint():
+    """
+    Endpoint to upload an audio file and return its duration.
+    """
+    audio_file = request.files.get("audio")
+
+    if not audio_file:
+        return jsonify({"error": "No audio file provided"}), 400
+
+    duration, error = get_audio_duration_from_form_file(audio_file)
+
+    if error:
+        return jsonify({"error": error}), 400
+
+    return jsonify({"message": "Audio processed successfully", "duration_minutes": duration}), 200
+
+
 
 @app.route("/log-audio-usage", methods=["POST"])
 @require_api_key
@@ -615,113 +633,6 @@ def log_audio_usage():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-@app.route("/transcribe-with-assemblyai", methods=["POST"])
-@require_api_key
-def transcribe_audio_with_assemblyai():
-    if "audio" not in request.files:
-        return jsonify({"error": "No audio file provided"}), 400
-    audio_file = request.files.get("audio")
-    is_dev = request.form.get("isDev")
-    source_language = request.form.get("sourceLanguage")
-    if not source_language:
-        return jsonify({'error': 'Missing source_language in request'}), 400
-    target_language = request.form.get("targetLanguage")
-    if not target_language:
-        return jsonify({'error': 'Missing target_language in request'}), 400
-    file_name = request.form.get("fileName")
-    if not file_name:
-        return jsonify({'error': 'Missing file_name in request'}), 400
-    duration = request.form.get("duration")
-    if not duration:
-        return jsonify({'error': 'Missing duration in request'}), 400
-    drive_id = request.form.get("driveId")
-    if not drive_id:
-        return jsonify({'error': 'Missing driveId in request'}), 400
-    group_id = request.form.get("groupId")
-    if not group_id:
-        return jsonify({'error': 'Missing groupId in request'}), 400
-    file_id = request.form.get("fileId")
-    if not file_id:
-        return jsonify({'error': 'Missing fileId in request'}), 400
-    folder_id = request.form.get("folderId")
-    if not folder_id:
-        return jsonify({'error': 'Missing folderId in request'}), 400
-    project_name = request.form.get("projectName")
-    if not project_name:
-        return jsonify({'error': 'Missing projectName in request'}), 400
-    
-    temp_path = f"temp_{audio_file.filename}"
-    audio_file.save(temp_path)
-    logging.info(f"SOURCE LANGUAGE: {source_language}")
-    #if source_language is ina list use a model otherwise another one
-    if source_language in ["en", "en_au", "en_uk", "en_us", "es", "fr", "de", "it", "pt", "nl", "hi", "ja", "zh", "fi", "ko", "pl", "ru", "tr", "uk", "vi"]:
-        logging.info("Using best model")
-        model = aai.SpeechModel.best
-        speaker_labels = True
-    else:
-        logging.info("Using nano model")
-        model = aai.SpeechModel.nano
-        speaker_labels = False
-    try:
-        logging.info(f"SPEAKER LABELS: {speaker_labels}")
-        logging.info(f"MODEL: {model}")
-        logging.info(f"SOURCE LANGUAGE: {source_language}")
-        logging.info(f"TARGET LANGUAGE: {target_language}")
-        logging.info(f"FILE NAME: {file_name}")
-        logging.info(f"DURATION: {duration}")
-        logging.info(f"DRIVE ID: {drive_id}")
-        logging.info(f"GROUP ID: {group_id}")
-        logging.info(f"FILE ID: {file_id}")
-        logging.info(f"FOLDER ID: {folder_id}")
-        # Configure for Chinese with Nano model and speaker diarization
-        config = aai.TranscriptionConfig(
-            language_code=source_language,
-            speech_model=model,
-            speaker_labels=speaker_labels
-        )
-        
-        transcriber = aai.Transcriber()
-        transcript = transcriber.transcribe(temp_path, config)
-        if transcript.status == aai.TranscriptStatus.error:
-            return jsonify({"error": transcript.error}), 500
-        
-        # Format the transcript with speaker labels as requested
-        if speaker_labels:
-            formatted_transcript = ""
-            for utterance in transcript.utterances:
-                formatted_transcript += f"speaker{utterance.speaker}: {utterance.text}\n"
-        else:
-            formatted_transcript = transcript.text
-        #return jsonify({
-        #    "transcription": formatted_transcript,
-        #})
-        logging.info(f"FORMATTED TRANSCRIPT: {formatted_transcript}")
-        if is_dev == "true":
-            url = "https://hook.eu2.make.com/1qn49rif17gctwp53zee3xbjb6aqvbko"
-        else:
-            url = "https://hook.eu2.make.com/qcc3jfwa2stoz8xqzjvap6581hqyl2oy"
-        logging.info(f"URL: {url}")
-        response = requests.post(
-            url,
-            data={
-                "transcription": formatted_transcript,
-                "fileName": file_name,
-                "duration": duration,
-                "driveId": drive_id,
-                "groupId": group_id,
-                "folderId": folder_id,
-                "fileId": file_id,
-                "projectName": project_name,
-                "sourceLanguage": source_language
-            }
-        )
-        if response.status_code != 200:
-            return jsonify({'error': 'Failed to send request to Make'}), 500
-        return jsonify({'message': 'Request sent to Make'}), 200
-    finally:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
 
 
 @app.route('/generate-monthly-report', methods=['POST'])
@@ -789,6 +700,42 @@ def generate_billing_document():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
+#########SENTIMENT ANALYSIS#########
+@app.route('/sentiment-analysis', methods=['POST'])
+@require_api_key
+def analyze_sentiment_and_queries():
+    try:
+        excel_file = request.files.get('file')
+        text_to_analyze = request.form.get('text')
+        
+        if not excel_file:
+            return jsonify({"error": "No Excel file provided."}), 400
+        if not text_to_analyze:
+            return jsonify({"error": "No text provided for analysis."}), 400
+
+        # Process queries (Sheet 1)
+        df_queries = load_excel_file(excel_file)
+        responses = process_queries(df_queries, text_to_analyze)
+        df_queries['Response'] = responses
+
+        # Run sentiment analysis using the Hospital_Reviews model
+        sentiment_results = run_sentiment_analysis(text_to_analyze)
+        df_sentiment_details = create_sentiment_details_df(sentiment_results)
+        df_sentiment_summary = create_sentiment_summary_df(df_sentiment_details)
+
+        # Generate the multi-sheet Excel file
+        output = generate_multi_sheet_excel(df_queries, df_sentiment_details, df_sentiment_summary)
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name="analyzed_data.xlsx"
+        )
+    except Exception as e:
+        logging.error(f"Error in analyze_sentiment_and_queries endpoint: {e}")
+        return jsonify({"error": str(e)}), 500
+    
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

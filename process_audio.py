@@ -371,9 +371,8 @@ def transcribe_with_deepgram(audio_file, language="en", transcript_model="whispe
             punctuate=True,
             paragraphs=True,
         )
-        timeout = httpx.Timeout(timeout=600.0, connect=60.0, read=600.0, write=600.0)
 
-        response = deepgram.listen.prerecorded.v("1").transcribe_file(payload, options, timeout=timeout)
+        response = deepgram.listen.prerecorded.v("1").transcribe_file(payload, options, timeout=240)
         print(f"response: {response}\n\n")
         return format_transcript(response)
 
