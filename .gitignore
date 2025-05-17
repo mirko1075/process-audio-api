@@ -2,3 +2,6 @@
 venv/
 __pycache__/*
 google/
+src/audio_api/application/__pycache__/*
+src/audio_api/application/blueprints/__pycache__/*
+src/audio_api/domain/__pycache__/*

@@ -57,7 +57,7 @@ ASSEMBLYAI_API_KEY=your_assemblyai_key
 
 Start the server:
 ```bash
-python app.py
+python -m audio_api.application.factory
 ```
 
 The server will run on `http://localhost:5000`

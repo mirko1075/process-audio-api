@@ -6,6 +6,11 @@ import time
 import threading
 import socket
 
+# Prepare environment for subprocesses to include src in PYTHONPATH
+base_env = os.environ.copy()
+src_path = os.path.abspath(os.path.join(os.getcwd(), 'src'))
+base_env['PYTHONPATH'] = src_path + os.pathsep + base_env.get('PYTHONPATH', '')
+
 class ChangeHandler(FileSystemEventHandler):
     def __init__(self, process, ignore_dirs, ignore_files, debounce_time=1):
         self.process = process
@@ -43,7 +48,10 @@ class ChangeHandler(FileSystemEventHandler):
             wait_for_port_to_be_free(5000)
 
             # Start a new process
-            self.process = subprocess.Popen(["python", "app.py"])
+            self.process = subprocess.Popen(
+                ["python", "-m", "audio_api.application.factory"],
+                env=base_env,
+            )
 
 def is_port_in_use(port):
     """
@@ -74,7 +82,10 @@ if __name__ == "__main__":
     wait_for_port_to_be_free(port)
 
     # Start the initial process
-    process = subprocess.Popen(["python", "app.py"])
+    process = subprocess.Popen(
+        ["python", "-m", "audio_api.application.factory"],
+        env=base_env,
+    )
 
     # Configure watchdog
     event_handler = ChangeHandler(process, ignore_dirs, ignore_files, debounce_time)
