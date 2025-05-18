@@ -188,4 +188,15 @@ Key dependencies include:
 - Python-dotenv
 
 For a complete list, see `requirements.txt`
+
+## Testing
+
+Unit tests are provided using `pytest`. To run the test suite:
+
+```bash
+# Install pytest if you haven’t already
+pip install pytest
+# Execute tests
+pytest
+```
 ```
