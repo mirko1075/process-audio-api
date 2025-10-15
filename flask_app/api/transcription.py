@@ -151,6 +151,92 @@ def file_too_large(error):
     }), 413
 
 
+@bp.route('/transcribe-and-translate', methods=['POST'])
+@require_api_key
+def transcribe_and_translate():
+    """Combined transcription and translation endpoint.
+    
+    Accepts multipart/form-data with:
+    - audio: Audio file
+    - translate: Whether to translate (true/false, optional, default: false)
+    - transcript_model: Transcription model ('deepgram', 'whisper', optional, default: 'deepgram')
+    - translation_model: Translation model ('google', 'openai', optional, default: 'google')
+    - language: Source language code (optional, default: 'en')
+    - target_language: Target language code (optional, default: 'en')
+    """
+    logger.info("Combined transcribe and translate request received")
+    
+    # Validate audio file
+    if 'audio' not in request.files:
+        raise BadRequest('No audio file provided')
+        
+    audio_file = request.files['audio']
+    if audio_file.filename == '':
+        raise BadRequest('No audio file selected')
+    
+    # Get parameters
+    translate = request.form.get('translate', 'false').lower() == 'true'
+    transcript_model = request.form.get('transcript_model', 'deepgram')
+    translation_model = request.form.get('translation_model', 'google')
+    language = request.form.get('language', 'en')
+    target_language = request.form.get('target_language', 'en')
+    
+    # Validate translation model
+    if translate and translation_model not in ['google', 'openai']:
+        raise BadRequest('Invalid translation model. Must be "google" or "openai"')
+    
+    logger.info(f"Processing combined request: transcript_model={transcript_model}, translate={translate}")
+    
+    try:
+        # Step 1: Transcribe audio using specified model
+        if transcript_model == 'whisper':
+            service = WhisperService()
+            transcription_result = service.transcribe(audio_file, language=language)
+        elif transcript_model == 'assemblyai':
+            service = AssemblyAIService()
+            transcription_result = service.transcribe(audio_file, language=language)
+        else:  # Default to deepgram
+            service = DeepgramService()
+            transcription_result = service.transcribe(audio_file, language=language)
+        
+        # Extract transcript text
+        transcript = transcription_result.get('transcript', '')
+        formatted_transcript_array = transcription_result.get('formatted_transcript_array', [])
+        
+        # Step 2: Translate if requested
+        translated_text = None
+        if translate and transcript:
+            logger.info(f"Translating transcript using {translation_model}")
+            
+            if translation_model == 'openai':
+                from flask_app.services.translation import OpenAITranslationService
+                translation_service = OpenAITranslationService()
+                translation_result = translation_service.translate(transcript, language, target_language)
+                translated_text = translation_result.get('translated_text')
+            else:  # Default to google
+                from flask_app.services.translation import GoogleTranslationService
+                translation_service = GoogleTranslationService()
+                translation_result = translation_service.translate(transcript, target_language)
+                translated_text = translation_result.get('translated_text')
+        
+        # Prepare response
+        result = {
+            'formatted_transcript_array': formatted_transcript_array,
+            'transcript': transcript,
+            'translated_text': translated_text
+        }
+        
+        logger.info("Combined transcribe and translate completed successfully")
+        return jsonify(result)
+        
+    except TranscriptionError as e:
+        logger.error(f"Transcription error: {e}")
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"Unexpected error in combined transcribe and translate: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+
 @bp.errorhandler(BadRequest)
 def handle_bad_request(error):
     """Handle bad request errors."""

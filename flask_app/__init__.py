@@ -52,12 +52,14 @@ def register_blueprints(app: Flask) -> None:
     from flask_app.api.transcription import bp as transcription_bp
     from flask_app.api.translation import bp as translation_bp
     from flask_app.api.postprocessing import bp as postprocessing_bp
+    from flask_app.api.utilities import bp as utilities_bp
     
     # Register blueprints with appropriate URL prefixes
     app.register_blueprint(health_bp)
     app.register_blueprint(transcription_bp, url_prefix='/transcriptions')
     app.register_blueprint(translation_bp, url_prefix='/translations')
     app.register_blueprint(postprocessing_bp)
+    app.register_blueprint(utilities_bp, url_prefix='/utilities')
 
 
 def register_error_handlers(app: Flask) -> None:

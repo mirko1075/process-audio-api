@@ -21,6 +21,25 @@ security:
   - ApiKeyAuth: []
 
 paths:
+  /:
+    get:
+      summary: Root endpoint
+      description: Welcome message and API information
+      tags:
+        - Health
+      security: []
+      responses:
+        '200':
+          description: Welcome message
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "AI Medical Transcription Backend"
+
   /health:
     get:
       summary: Health check endpoint
@@ -184,6 +203,84 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /transcriptions/transcribe-and-translate:
+    post:
+      summary: Combined transcription and translation
+      description: Transcribe an audio file and optionally translate the result in one call
+      tags:
+        - Transcription
+        - Translation
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - audio
+              properties:
+                audio:
+                  type: string
+                  format: binary
+                  description: Audio file to transcribe
+                translate:
+                  type: string
+                  enum: ["true", "false"]
+                  default: "false"
+                  description: Whether to translate the transcription
+                transcript_model:
+                  type: string
+                  enum: ["deepgram", "whisper", "assemblyai"]
+                  default: "deepgram"
+                  description: Transcription service to use
+                translation_model:
+                  type: string
+                  enum: ["google", "openai"]
+                  default: "google"
+                  description: Translation service to use (if translate=true)
+                language:
+                  type: string
+                  default: "en"
+                  description: Source language code
+                target_language:
+                  type: string
+                  default: "en"
+                  description: Target language code for translation
+      responses:
+        '200':
+          description: Transcription and optional translation successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  formatted_transcript_array:
+                    type: array
+                    items:
+                      type: string
+                    description: Array of formatted transcript segments
+                  transcript:
+                    type: string
+                    description: Complete transcription text
+                  translated_text:
+                    type: string
+                    nullable: true
+                    description: Translated text (if translation was requested)
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          description: Processing failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /translations/openai:
     post:
       summary: Translate text using OpenAI GPT
@@ -298,6 +395,98 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+
+  /translations/deepseek:
+    post:
+      summary: Translate text using DeepSeek AI
+      description: Medical text translation using DeepSeek with support for Asian languages and external integrations
+      tags:
+        - Translation
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - text
+              properties:
+                text:
+                  type: string
+                  description: Text to translate
+                source_language:
+                  type: string
+                  default: "auto"
+                  description: Source language code
+                  example: "th"
+                target_language:
+                  type: string
+                  default: "en"
+                  description: Target language code
+                  example: "en"
+                fileName:
+                  type: string
+                  description: File name for external integrations
+                duration:
+                  type: string
+                  description: Duration for external integrations
+                driveId:
+                  type: string
+                  description: Drive ID for external integrations
+                groupId:
+                  type: string
+                  description: Group ID for external integrations
+                folderId:
+                  type: string
+                  description: Folder ID for external integrations
+                fileId:
+                  type: string
+                  description: File ID for external integrations
+                projectName:
+                  type: string
+                  description: Project name for external integrations
+                isDev:
+                  type: string
+                  enum: ["true", "false"]
+                  default: "false"
+                  description: Development mode flag
+                isLocal:
+                  type: string
+                  enum: ["true", "false"]
+                  default: "false"
+                  description: Local mode flag
+      responses:
+        '200':
+          description: Translation successful
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      translated_text:
+                        type: string
+                        description: Translated text (for local mode)
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        description: Confirmation message (for external integration)
+                        example: "Request sent to external service"
+        '400':
+          description: Translation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /sentiment:
     post:
@@ -427,6 +616,177 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+
+  /utilities/audio-duration:
+    post:
+      summary: Get audio file duration
+      description: Upload an audio file to get its duration in minutes
+      tags:
+        - Utilities
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - audio
+              properties:
+                audio:
+                  type: string
+                  format: binary
+                  description: Audio file to analyze
+      responses:
+        '200':
+          description: Duration calculated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Audio processed successfully"
+                  duration_minutes:
+                    type: number
+                    format: float
+                    description: Duration of the audio file in minutes
+                    example: 15.5
+        '400':
+          description: Bad request - no audio file or analysis failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          description: Error processing audio file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /utilities/log-usage:
+    post:
+      summary: Log audio usage for billing
+      description: Log audio processing usage to Google Sheets for billing purposes
+      tags:
+        - Utilities
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - user_code
+                - fileName
+                - duration
+              properties:
+                user_code:
+                  type: string
+                  description: User identifier for billing
+                  example: "user123"
+                fileName:
+                  type: string
+                  description: Name of the processed file
+                  example: "medical_interview.mp3"
+                duration:
+                  type: string
+                  description: Duration in minutes
+                  example: "15.5"
+      responses:
+        '200':
+          description: Usage logged successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "File processed successfully"
+                  user_code:
+                    type: string
+                    example: "user123"
+                  filename:
+                    type: string
+                    example: "medical_interview.mp3"
+                  duration:
+                    type: number
+                    format: float
+                    example: 15.5
+                  cost_per_minute:
+                    type: string
+                    example: "0.20"
+                  total_cost:
+                    type: string
+                    example: "3.10"
+                  Billed:
+                    type: string
+                    example: "YES"
+        '400':
+          description: Bad request - missing required parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          description: Error logging usage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /utilities/text-file:
+    post:
+      summary: Create downloadable text file
+      description: Generate a downloadable text file from provided content
+      tags:
+        - Utilities
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - text
+              properties:
+                text:
+                  type: string
+                  description: Text content for the file
+                  example: "This is the content of the text file..."
+                filename:
+                  type: string
+                  default: "output.txt"
+                  description: Desired filename (will add .txt extension if missing)
+                  example: "medical_notes.txt"
+      responses:
+        '200':
+          description: Text file generated successfully
+          content:
+            text/plain:
+              schema:
+                type: string
+                format: binary
+                description: Downloadable text file
+        '400':
+          description: Bad request - no text content provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error creating text file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   securitySchemes:
