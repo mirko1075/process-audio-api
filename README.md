@@ -198,9 +198,16 @@ Render utilizzerà automaticamente il `Dockerfile` presente nel repository:
 ```dockerfile
 # Il Dockerfile gestisce automaticamente:
 # - Installazione dipendenze da requirements.txt
-# - Configurazione gunicorn con 4 workers
-# - Esposizione porta 5000
+# - Configurazione gunicorn ottimizzata per AI requests
+# - Timeout di 15 minuti per richieste lunghe
+# - 2 workers per gestire memoria e CPU intensive tasks
+# - Esposizione porta dinamica
 # - Health checks
+```
+
+**Start Command Consigliato (se non usi Docker):**
+```bash
+gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 900 --keep-alive 5 --max-requests 50 --preload
 ```
 
 #### **6. Deploy e Verifica**
@@ -227,12 +234,25 @@ curl -X POST https://medical-transcription-api.onrender.com/transcriptions/deepg
 #### **🔧 Troubleshooting Render**
 
 **Errore 1: ModuleNotFoundError: No module named 'flask_cors'**
+
 ```bash
 # Soluzione: Assicurati che Flask-CORS sia nel requirements.txt
 Flask-CORS==5.0.0
 ```
 
-**Errore 2: Port binding issues**
+**Errore 2: OpenAI API Timeout (Worker exiting, SystemExit: 1)**
+
+```bash
+# Problema: Gunicorn worker timeout durante traduzioni lunghe
+# Soluzione: Usa il comando start ottimizzato:
+gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 900 --keep-alive 5 --max-requests 50 --preload
+
+# Environment Variables da aggiungere:
+WEB_CONCURRENCY=2  # Numero di worker (Render lo rileva automaticamente)
+```
+
+**Errore 3: Port binding issues**
+
 ```bash
 # Soluzione: Render usa la variabile PORT dinamica
 # Il Dockerfile è già configurato per usare $PORT
@@ -241,7 +261,8 @@ Flask-CORS==5.0.0
 # Start Command: (lascia vuoto, usa il CMD del Dockerfile)
 ```
 
-**Errore 3: Environment variables non trovate**
+**Errore 4: Environment variables non trovate**
+
 ```bash
 # Soluzione: Nel dashboard Render, verifica di aver aggiunto:
 FLASK_APP=app.py
@@ -252,7 +273,8 @@ OPENAI_API_KEY=your-key
 # ... altre variabili necessarie
 ```
 
-**Errore 4: Build timeout o out of memory**
+**Errore 5: Build timeout o out of memory**
+
 ```bash
 # Soluzione: Aggiungi .dockerignore per escludere file non necessari:
 echo "__pycache__" >> .dockerignore
@@ -262,10 +284,14 @@ echo "node_modules" >> .dockerignore
 echo ".venv" >> .dockerignore
 ```
 
-**Errore 5: Gunicorn workers crash**
+**Errore 6: Rate limiting OpenAI**
+
 ```bash
-# Soluzione: Il Dockerfile usa 4 workers, riduci a 2 per Starter plan
-# Modifica nel Dockerfile: --workers 2
+# Soluzione: Il client ora include retry automatico con backoff esponenziale
+# Configurazione automatica:
+# - 3 tentativi per richiesta
+# - Delay esponenziale tra retry (4-10 secondi)
+# - Delay 0.5s tra chunk per evitare rate limiting
 ```
 
 ### **Altre Piattaforme Cloud**

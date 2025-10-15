@@ -1,12 +1,15 @@
 """OpenAI API client for Whisper transcription and GPT translation."""
 import logging
 import os
+import time
 from typing import Dict, Any
 from functools import lru_cache
 
 import openai
+import httpx
 from pydub import AudioSegment
 import tiktoken
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from utils.config import get_app_config
 from utils.exceptions import TranscriptionError, TranslationError
@@ -22,8 +25,28 @@ class OpenAIClient:
         config = get_app_config()
         if not config.openai.api_key:
             raise TranscriptionError("OpenAI API key not configured")
+        
+        # Enhanced timeout configuration for production
+        timeout_config = httpx.Timeout(
+            connect=60.0,    # 1 minute to establish connection
+            read=600.0,      # 10 minutes to read response (for long translations)
+            write=300.0,     # 5 minutes to send data
+            pool=60.0        # 1 minute connection pool timeout
+        )
+        
+        # HTTP client with custom timeout and connection limits
+        http_client = httpx.Client(
+            timeout=timeout_config,
+            limits=httpx.Limits(
+                max_connections=10, 
+                max_keepalive_connections=5
+            )
+        )
             
-        self._client = openai.OpenAI(api_key=config.openai.api_key)
+        self._client = openai.OpenAI(
+            api_key=config.openai.api_key,
+            http_client=http_client
+        )
         self._model = config.openai.model
         
         # Initialize tokenizer for text chunking
@@ -33,7 +56,7 @@ class OpenAIClient:
             self._tokenizer = tiktoken.get_encoding("cl100k_base")
             logger.warning(f"Using fallback tokenizer for model {self._model}")
         
-        logger.info(f"OpenAI client initialized with model {self._model}")
+        logger.info(f"OpenAI client initialized with model {self._model} and enhanced timeout config")
     
     def transcribe_with_chunking(self, audio_path: str, language: str = 'en') -> Dict[str, Any]:
         """Transcribe audio with automatic chunking for large files.
@@ -197,44 +220,66 @@ class OpenAIClient:
         else:
             return self._translate_chunked(text, source_language, target_language)
     
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        retry=retry_if_exception_type((openai.RateLimitError, openai.APITimeoutError, httpx.TimeoutException)),
+        reraise=True
+    )
     def _translate_single(self, text: str, source_language: str, target_language: str) -> Dict[str, Any]:
-        """Translate text in single request."""
+        """Translate text in single request with retry logic."""
         prompt = (
             f"You are an expert medical translator. Translate the following text from {source_language} to {target_language}. "
             "Preserve medical terminology, speaker intent, and maintain professional tone. "
             "Return only the translated text without any additional commentary."
         )
         
-        response = self._client.chat.completions.create(
-            model=self._model,
-            messages=[
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": text}
-            ],
-            temperature=0.1,
-            max_tokens=4000
-        )
-        
-        translated_text = response.choices[0].message.content.strip()
-        
-        return {
-            "translated_text": translated_text,
-            "source_language": source_language,
-            "target_language": target_language,
-            "model_used": self._model,
-            "service": "openai_gpt"
-        }
+        try:
+            logger.debug(f"Sending translation request for {len(text)} characters")
+            response = self._client.chat.completions.create(
+                model=self._model,
+                messages=[
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": text}
+                ],
+                temperature=0.1,
+                max_tokens=4000
+            )
+            
+            translated_text = response.choices[0].message.content.strip()
+            
+            return {
+                "translated_text": translated_text,
+                "source_language": source_language,
+                "target_language": target_language,
+                "model_used": self._model,
+                "service": "openai_gpt"
+            }
+        except Exception as e:
+            logger.error(f"Translation request failed: {e}")
+            raise TranslationError(f"OpenAI translation failed: {str(e)}")
     
     def _translate_chunked(self, text: str, source_language: str, target_language: str) -> Dict[str, Any]:
-        """Translate long text using chunking strategy."""
-        # Implementation similar to the one we created earlier
-        # Split by sentences, translate each chunk, combine results
+        """Translate long text using chunking strategy with improved error handling."""
         chunks = self._split_text_for_translation(text)
         translated_chunks = []
         
-        for chunk in chunks:
-            result = self._translate_single(chunk, source_language, target_language)
-            translated_chunks.append(result["translated_text"])
+        logger.info(f"Translating {len(chunks)} chunks for {len(text)} characters")
+        
+        for i, chunk in enumerate(chunks, 1):
+            logger.info(f"Processing chunk {i}/{len(chunks)} ({len(chunk)} chars)")
+            
+            try:
+                result = self._translate_single(chunk, source_language, target_language)
+                translated_chunks.append(result["translated_text"])
+                
+                # Small delay between chunks to avoid rate limiting
+                if i < len(chunks):
+                    time.sleep(0.5)
+                    
+            except Exception as e:
+                logger.error(f"Failed to translate chunk {i}: {e}")
+                raise TranslationError(f"Chunk {i} translation failed: {str(e)}")
         
         full_translation = " ".join(translated_chunks)
         
