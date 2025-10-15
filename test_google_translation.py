@@ -7,7 +7,7 @@ import os
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath('.'))
 
-from core.translation.google_service import GoogleTranslator
+from flask_app.clients.google import GoogleClient
 from utils.exceptions import TranslationError
 
 
@@ -18,7 +18,7 @@ def test_google_translation():
     
     try:
         print("1. Initializing Google Translator...")
-        translator = GoogleTranslator()
+        translator = GoogleClient()
         print("   ✓ Translator initialized successfully")
         
         print("\n2. Testing translation...")

@@ -9,7 +9,7 @@ from typing import Dict, Any
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath('.'))
 
-from core.translation.openai_service import get_openai_translator
+from flask_app.clients.openai import OpenAIClient
 from utils.config import get_app_config
 
 
@@ -64,15 +64,15 @@ def test_token_counting():
     print("\n=== Testing Token Counting ===")
     
     try:
-        translator = get_openai_translator()
+        translator = OpenAIClient()
         
-        # Test with short text
-        short_tokens = translator._count_tokens(SHORT_MEDICAL_TEXT)
-        print(f"Short text tokens: {short_tokens} (chars: {len(SHORT_MEDICAL_TEXT)})")
+        # Test with short text - Note: _count_tokens is now internal to tokenizer
+        short_text_tokens = len(translator._tokenizer.encode(SHORT_MEDICAL_TEXT))
+        print(f"Short text tokens: {short_text_tokens} (chars: {len(SHORT_MEDICAL_TEXT)})")
         
-        # Test with long text
-        long_tokens = translator._count_tokens(LONG_MEDICAL_TEXT)
-        print(f"Long text tokens: {long_tokens} (chars: {len(LONG_MEDICAL_TEXT)})")
+        # Test with long text  
+        long_text_tokens = len(translator._tokenizer.encode(LONG_MEDICAL_TEXT))
+        print(f"Long text tokens: {long_text_tokens} (chars: {len(LONG_MEDICAL_TEXT)})")
         
         print(f"Model: {translator._model}, Max tokens: {translator._max_tokens}")
         
@@ -88,14 +88,15 @@ def test_text_chunking():
     print("\n=== Testing Text Chunking ===")
     
     try:
-        translator = get_openai_translator()
+        translator = OpenAIClient()
         
         # Test chunking with different token limits
         test_limits = [100, 200, 500]
         
         for limit in test_limits:
-            chunks = translator._split_text_into_chunks(LONG_MEDICAL_TEXT, limit)
-            print(f"\nToken limit {limit}:")
+            # Use the internal method for text splitting
+            chunks = translator._split_text_for_translation(LONG_MEDICAL_TEXT)
+            print(f"\nUsing sentence-based chunking:")
             print(f"  Number of chunks: {len(chunks)}")
             
             total_chars = 0
@@ -121,12 +122,12 @@ def test_short_translation():
     print("\n=== Testing Short Text Translation ===")
     
     try:
-        translator = get_openai_translator()
+        translator = OpenAIClient()
         
-        result = translator.translate(
+        result = translator.translate_text(
             text=SHORT_MEDICAL_TEXT,
-            source_language="English",
-            target_language="Spanish"
+            source_language="en",
+            target_language="es"
         )
         
         print(f"Original text ({len(SHORT_MEDICAL_TEXT)} chars):")
@@ -153,16 +154,16 @@ def test_long_translation():
     print("\n=== Testing Long Text Translation ===")
     
     try:
-        translator = get_openai_translator()
+        translator = OpenAIClient()
         
         # Count tokens to verify chunking will be used
-        tokens = translator._count_tokens(LONG_MEDICAL_TEXT)
+        tokens = len(translator._tokenizer.encode(LONG_MEDICAL_TEXT))
         print(f"Input text: {tokens} tokens, {len(LONG_MEDICAL_TEXT)} chars")
         
-        result = translator.translate(
+        result = translator.translate_text(
             text=LONG_MEDICAL_TEXT,
-            source_language="English", 
-            target_language="Spanish"
+            source_language="en", 
+            target_language="es"
         )
         
         print(f"\nTranslation completed:")

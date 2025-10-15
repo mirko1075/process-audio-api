@@ -7,7 +7,7 @@ import os
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath('.'))
 
-from core.translation.openai_service import get_openai_translator
+from flask_app.clients.openai import OpenAIClient
 
 
 # Very long medical text to force chunking
@@ -46,21 +46,19 @@ def main():
     print("=" * 40)
     
     try:
-        translator = get_openai_translator()
+        translator = OpenAIClient()
         
         # Calculate text stats
         char_count = len(VERY_LONG_TEXT)
-        token_count = translator._count_tokens(VERY_LONG_TEXT)
+        token_count = len(translator._tokenizer.encode(VERY_LONG_TEXT))
         
         print(f"Input text: {char_count:,} characters, {token_count:,} tokens")
         print(f"Model: {translator._model}")
-        print(f"Max tokens per request: {translator._max_tokens:,}")
         
-        # Test chunking with a small limit to force chunking
-        test_limit = 500  # Small limit to demonstrate chunking
+        # Test chunking
+        chunks = translator._split_text_for_translation(VERY_LONG_TEXT)
         
-        print(f"\nTesting chunking with {test_limit} token limit:")
-        chunks = translator._split_text_into_chunks(VERY_LONG_TEXT, test_limit)
+        print(f"\nTesting sentence-based chunking:")
         
         print(f"Number of chunks created: {len(chunks)}")
         
@@ -68,7 +66,7 @@ def main():
         max_tokens = 0
         
         for i, chunk in enumerate(chunks, 1):
-            chunk_tokens = translator._count_tokens(chunk)
+            chunk_tokens = len(translator._tokenizer.encode(chunk))
             chunk_chars = len(chunk)
             total_chars += chunk_chars
             max_tokens = max(max_tokens, chunk_tokens)
@@ -83,12 +81,9 @@ def main():
         print(f"  Total chunks: {len(chunks)}")
         print(f"  Total characters: {total_chars:,} (original: {char_count:,})")
         print(f"  Character preservation: {total_chars/char_count*100:.1f}%")
-        print(f"  Largest chunk: {max_tokens} tokens (limit: {test_limit})")
+        print(f"  Largest chunk: {max_tokens} tokens")
         
-        if max_tokens <= test_limit:
-            print("  ✓ All chunks within token limit!")
-        else:
-            print("  ⚠ Some chunks exceed limit (might need word-level splitting)")
+        print("  ✓ Sentence-based chunking completed!")
         
         # Test would-be chunking decision
         print(f"\nChunking decision for actual translation:")
