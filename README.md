@@ -268,7 +268,7 @@ echo ".venv" >> .dockerignore
 # Modifica nel Dockerfile: --workers 2
 ```
 
-### **Altre Piattaforme Cloud**
+### **Other Cloud Platforms**
 - **Railway**: Deploy simile a Render, GitHub integration
 - **AWS ECS/Fargate**: Use the included Dockerfile
 - **Google Cloud Run**: Auto-scaling container deployment
