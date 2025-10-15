@@ -1,191 +1,224 @@
+# AI Medical Transcription Backend
 
+A production-ready Flask backend for transcribing, translating and analyzing medical conversations. The service integrates with multiple AI providers including Deepgram Nova-2, OpenAI Whisper/GPT, AssemblyAI, DeepSeek, and Google Cloud services.
 
-```markdown:README.md
-# Audio Processing API
+## 🏗️ Architecture
 
-A Flask-based REST API for audio processing, transcription, and analysis. This service supports multiple transcription models (AssemblyAI, OpenAI Whisper, Deepgram), sentiment analysis, and file handling capabilities.
+This Flask application follows modern best practices with a modular architecture:
 
-## Features
+```
+flask_app/
+  __init__.py                 # Application factory
+  api/                        # Flask blueprints (routes + business logic)
+    health.py                 # Health check endpoints
+    transcription.py          # Audio transcription services
+    translation.py            # Text translation services  
+    postprocessing.py         # Document generation & sentiment analysis
+    utilities.py              # Utility functions (duration, logging, files)
+  services/                   # Business logic orchestration
+    transcription.py          # Transcription service coordination
+    translation.py            # Translation service coordination
+    postprocessing.py         # Document and analysis services
+  clients/                    # External API integrations
+    deepgram.py              # Deepgram Nova-2 client
+    openai.py                # OpenAI Whisper/GPT client
+    assemblyai.py            # AssemblyAI client
+    google.py                # Google Cloud services client
+    deepseek.py              # DeepSeek translation client
+utils/                        # Shared utilities
+  config.py                  # Configuration management
+  auth.py                    # Authentication decorators
+  logging.py                 # Logging setup
+  exceptions.py              # Custom exceptions
+app.py                        # Main application entry point
+```
 
-- 🎤 Audio transcription using multiple providers:
-  - AssemblyAI
-  - OpenAI Whisper
-  - Deepgram
-- 📊 Sentiment analysis
-- 📝 Text file generation
-- 📊 Excel report generation
-- 🔒 API key authentication
-- 🎯 Multi-language support
+### 🎯 Design Principles
 
-## Prerequisites
+- **Flask Best Practices**: Application factory pattern with blueprints
+- **Single Responsibility**: Each layer has a clear, focused purpose
+- **Separation of Concerns**: API routes, business logic, and external clients are separated
+- **Modularity**: Services can be easily extended or replaced
+- **Error Handling**: Comprehensive error handling with proper HTTP status codes
 
-- Python 3.12+
-- FFmpeg installed on your system
-- Valid API keys for:
-  - AssemblyAI
-  - OpenAI
-  - Deepgram
+## 🚀 Getting Started
 
-## Installation
+1. **Clone the repository and install dependencies:**
 
-1. Clone the repository:
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+
+2. **Configure environment variables:**
+
+   ```bash
+   cp .env.example .env
+   # Edit .env with your API keys
+   ```
+
+3. **Run the development server:**
+
+   ```bash
+   python app.py
+   ```
+
+   The server will start on `http://localhost:5000`
+
+4. **Health check:** The application is ready when `GET /health` returns 200.
+
+## 📡 API Endpoints
+
+### **🔍 Health & Status**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/` | Root welcome message |
+| `GET` | `/health` | Health check & system status |
+
+### **🎤 Transcription Services**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/transcriptions/deepgram` | Deepgram Nova-2 transcription with speaker diarization |
+| `POST` | `/transcriptions/whisper` | OpenAI Whisper transcription (auto-chunking for large files) |
+| `POST` | `/transcriptions/assemblyai` | AssemblyAI transcription with language detection |
+| `POST` | `/transcriptions/transcribe-and-translate` | **Combined** transcription + translation in one call |
+
+### **🌐 Translation Services**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/translations/openai` | OpenAI GPT-4 medical translation (with text chunking) |
+| `POST` | `/translations/google` | Google Cloud Translation API |
+| `POST` | `/translations/deepseek` | DeepSeek AI medical translation (specialized for Asian languages) |
+
+### **📄 Document Generation**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/documents/<format>` | Generate documents: `word`, `excel`, `pdf`, `text` |
+
+### **📊 Analytics & Reporting**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/sentiment` | Sentiment analysis using hospital reviews model |
+| `POST` | `/reports/<format>` | Generate reports: `monthly`, `billing` |
+
+### **🛠️ Utilities**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/utilities/audio-duration` | Get audio file duration in minutes |
+| `POST` | `/utilities/log-usage` | Log usage for billing (Google Sheets integration) |
+| `POST` | `/utilities/text-file` | Create downloadable text files |
+
+## 🔧 Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `API_KEY` | ✅ | API key required in `x-api-key` header |
+| `DEEPGRAM_API_KEY` | ✅ | Deepgram Nova-2 API key |
+| `OPENAI_API_KEY` | ✅ | OpenAI API key for Whisper + GPT |
+| `DEEPSEEK_API_KEY` | ⚠️ | DeepSeek API key (required for DeepSeek translation) |
+| `ASSEMBLYAI_API_KEY` | ⚠️ | AssemblyAI API key (optional) |
+| `GOOGLE_APPLICATION_CREDENTIALS` | ⚠️ | Google Cloud credentials JSON path |
+| `ALLOWED_ORIGINS` | ⚠️ | CORS allowed origins (comma separated) |
+| `LOG_LEVEL` | ⚠️ | Logging level (DEBUG, INFO, WARNING, ERROR) |
+| `LOG_FORMAT` | ⚠️ | Logging format |
+
+## 🚢 Deployment
+
+### **Docker (Recommended)**
 ```bash
-git clone <repository-url>
-cd <project-directory>
+# Build and run with Docker Compose
+docker-compose up --build
+
+# Or build and run manually
+docker build -t medical-transcription-api .
+docker run -p 5000:5000 --env-file .env medical-transcription-api
 ```
 
-2. Create and activate a virtual environment:
+### **Production Platforms**
+- **Render/Railway**: Deploy directly from GitHub
+- **AWS ECS/Fargate**: Use the included Dockerfile
+- **Google Cloud Run**: Auto-scaling container deployment
+- **Heroku**: Git-based deployment
+
+### **Production Configuration**
+- Uses `gunicorn` WSGI server
+- Configured for port 5000 by default
+- Health checks available at `/health`
+- Comprehensive logging and error handling
+
+## 🧪 Testing
+
+Run the test suite:
+
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Install test dependencies
+pip install pytest pytest-cov
+
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=flask_app tests/
 ```
 
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+## 📚 API Documentation
 
-4. Create a `.env` file with your API keys:
-```env
-OPENAI_API_KEY=your_openai_key
-API_KEY=your_api_key
-DEEPGRAM_API_KEY=your_deepgram_key
-ASSEMBLYAI_API_KEY=your_assemblyai_key
-```
+- **OpenAPI Specification**: See `openapi.yaml` for complete API documentation
+- **Postman Collection**: Import `postman_collection.json` for testing endpoints
+- **Interactive Docs**: Swagger UI available when running locally
 
-## Usage
+## 🔒 Security Features
 
-Start the server:
-```bash
-python app.py
-```
+- **API Key Authentication**: All endpoints require `x-api-key` header
+- **Input Validation**: Comprehensive request validation
+- **Error Handling**: Sanitized error responses
+- **CORS Protection**: Configurable allowed origins
+- **File Size Limits**: Automatic chunking for large files
 
-The server will run on `http://localhost:5000`
+## 📈 Performance Features
 
-### API Endpoints
+- **Audio Chunking**: Large audio files automatically split for processing
+- **Text Chunking**: Long texts split for optimal translation
+- **Async Processing**: Non-blocking operations where possible
+- **Caching**: Intelligent caching of API responses
+- **Compression**: Automatic audio compression for large files
 
-All endpoints require an `x-api-key` header for authentication.
+## 🌍 Language Support
 
-#### 1. Process Audio
-```http
-POST /process
-Content-Type: multipart/form-data
-x-api-key: your_api_key
+- **Transcription**: 50+ languages via Deepgram/Whisper
+- **Translation**: All major languages via OpenAI/Google/DeepSeek
+- **Specialized**: Medical terminology optimization for Asian languages
+- **Speaker Diarization**: Multi-speaker conversation support
 
-Parameters:
-- audio: (file) Audio file to process
-- double_model: (boolean) Use both AssemblyAI and Whisper
-- language: (string) Target language code (default: "en")
-- sentiment_analysis: (boolean) Perform sentiment analysis
-- best_model: (boolean) Use best quality model
-```
+## 🔧 Troubleshooting
 
-#### 2. Create Text File
-```http
-POST /text-to-file
-Content-Type: application/json
-x-api-key: your_api_key
+See `TROUBLESHOOTING.md` for common issues and solutions.
 
-Body:
-{
-    "text": "Your text content",
-    "fileName": "desired_filename"
-}
-```
+## 🤝 Contributing
 
-#### 3. Process Audio to File
-```http
-POST /process-to-file
-Content-Type: multipart/form-data
-x-api-key: your_api_key
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-Parameters:
-- audio: (file) Audio file to process
-- best_model: (boolean) Use best quality model
-```
+## 📄 License
 
-#### 4. Sentiment Analysis
-```http
-POST /sentiment-analysis
-Content-Type: multipart/form-data
-x-api-key: your_api_key
+This project is licensed under the MIT License - see the LICENSE file for details.
+| `POST` | `/sentiment` | Medical sentiment analysis |
+| `POST` | `/documents/word` | Generate DOCX transcripts |
+| `POST` | `/reports/excel` | Build Excel summaries |
 
-Parameters:
-- file: (file) Excel file with queries
-- text: (string) Text to analyze
-- best_model: (boolean) Use best quality model
-```
+All endpoints require the `x-api-key` header.
 
-#### 5. Generate Excel Report
-```http
-POST /generate-excel
-Content-Type: application/json
-x-api-key: your_api_key
+## Logging & observability
 
-Body:
-{
-    "sheets": [
-        {
-            "name": "Sheet1",
-            "data": [
-                ["Header1", "Header2"],
-                ["Value1", "Value2"]
-            ]
-        }
-    ]
-}
-```
+Logging is centralised in `utils/logging.py`. Switch to JSON logs by setting
+`LOG_FORMAT=json` for better integration with cloud logging platforms.
 
-## Error Handling
+## Further improvements
 
-The API returns appropriate HTTP status codes:
-- 200: Success
-- 400: Bad Request
-- 401: Unauthorized (invalid API key)
-- 500: Internal Server Error
-
-## File Size Limits
-
-- Maximum audio file size: 100MB
-- Larger files are automatically split into chunks for processing
-
-## Development
-
-- Uses Flask for the web framework
-- Implements logging for debugging
-- Supports multiple audio formats (converts to WAV internally)
-- Includes cleanup of temporary files
-
-## Security
-
-- API key authentication required for all endpoints
-- Environment variables for sensitive credentials
-- Input validation and sanitization
-
-## Environment Variables
-
-Required environment variables in `.env` file:
-```env
-OPENAI_API_KEY=your_openai_api_key
-API_KEY=your_api_key
-DEEPGRAM_API_KEY=your_deepgram_api_key
-ASSEMBLYAI_API_KEY=your_assemblyai_api_key
-DEEPSEEK_API_KEY=your_deepseek_api_key
-DEEPL_API_KEY=your_deepl_api_key
-DEEPL_API_URL=https://api-free.deepl.com/v2/translate
-```
-
-## Dependencies
-
-Key dependencies include:
-- Flask
-- OpenAI
-- AssemblyAI
-- Deepgram
-- FFmpeg-python
-- Pandas
-- OpenPyXL
-- Python-dotenv
-
-For a complete list, see `requirements.txt`
-```
+- Add request tracing (e.g. OpenTelemetry) for distributed debugging.
+- Implement background processing for long-running transcription jobs.
+- Extend test coverage with mocked service clients.
