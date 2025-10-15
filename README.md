@@ -135,17 +135,151 @@ docker build -t medical-transcription-api .
 docker run -p 5000:5000 --env-file .env medical-transcription-api
 ```
 
-### **Production Platforms**
-- **Render/Railway**: Deploy directly from GitHub
+### **Render.com Deployment** 🌐
+
+Render is a modern cloud platform ideal for deploying Flask APIs with automatic CI/CD.
+
+#### **1. Preparazione Repository**
+```bash
+# Make sure your repository is pushed to GitHub
+git add .
+git commit -m "Ready for Render deployment"
+git push origin main
+```
+
+#### **2. Render Configuration**
+
+1. **Crea un nuovo Web Service** su [render.com](https://render.com)
+2. **Connetti il repository GitHub**: `mirko1075/process-audio-api`
+3. **Configura il servizio**:
+   ```
+   Name: medical-transcription-api
+   Environment: Docker
+   Branch: main
+   Dockerfile Path: ./Dockerfile
+   ```
+
+#### **3. Variabili d'Ambiente**
+Add all the following environment variables in the Render dashboard:
+
+```bash
+# Core Configuration
+FLASK_APP=app.py
+FLASK_ENV=production
+PORT=5000
+
+# Authentication
+API_KEY=your-secure-api-key-here
+
+# AI Service API Keys (Obtain from respective platforms)
+DEEPGRAM_API_KEY=your_deepgram_key_here
+OPENAI_API_KEY=your_openai_key_here
+ASSEMBLYAI_API_KEY=your_assemblyai_key_here
+DEEPSEEK_API_KEY=your_deepseek_key_here
+
+# Google Cloud (Base64 del file credentials JSON)
+GOOGLE_APPLICATION_CREDENTIALS_JSON=base64_encoded_json_here
+
+# Optional Configuration
+GOOGLE_CLOUD_PROJECT_ID=your_project_id
+ALLOWED_ORIGINS=https://yourdomain.com,https://anotherdomain.com
+LOG_LEVEL=INFO
+```
+
+#### **4. Configurazione Avanzata**
+```bash
+# Instance Type: Starter (512MB RAM) o Standard (2GB RAM)
+# Auto-Deploy: Yes (for automatic CI/CD)
+# Health Check Path: /health
+```
+
+#### **5. Build Commands**
+Render utilizzerà automaticamente il `Dockerfile` presente nel repository:
+```dockerfile
+# Il Dockerfile gestisce automaticamente:
+# - Installazione dipendenze da requirements.txt
+# - Configurazione gunicorn con 4 workers
+# - Esposizione porta 5000
+# - Health checks
+```
+
+#### **6. Deploy and Verification**
+```bash
+# URL del tuo servizio (esempio):
+https://medical-transcription-api.onrender.com
+
+# Test health check:
+curl https://medical-transcription-api.onrender.com/health
+
+# Test endpoint di esempio:
+curl -X POST https://medical-transcription-api.onrender.com/transcriptions/deepgram \
+  -H "x-api-key: your-api-key" \
+  -F "audio=@test.mp3" \
+  -F "language=en"
+```
+
+#### **7. Monitoraggio**
+- **Logs**: Visualizza in tempo reale nel dashboard Render
+- **Metrics**: CPU, Memory, Request count automatici
+- **Alerts**: Configura notifiche per downtime
+- **Auto-scaling**: Disponibile nei piani paid
+
+#### **🔧 Troubleshooting Render**
+
+**Errore 1: ModuleNotFoundError: No module named 'flask_cors'**
+```bash
+# Soluzione: Assicurati che Flask-CORS sia nel requirements.txt
+Flask-CORS==5.0.0
+```
+
+**Errore 2: Port binding issues**
+```bash
+# Soluzione: Render usa la variabile PORT dinamica
+# Il Dockerfile è già configurato per usare $PORT
+# Verifica che nel dashboard Render sia configurato:
+# Environment: Docker
+# Start Command: (lascia vuoto, usa il CMD del Dockerfile)
+```
+
+**Errore 3: Environment variables non trovate**
+```bash
+# Soluzione: Nel dashboard Render, verifica di aver aggiunto:
+FLASK_APP=app.py
+FLASK_ENV=production
+API_KEY=your-api-key-here
+DEEPGRAM_API_KEY=your-key
+OPENAI_API_KEY=your-key
+# ... altre variabili necessarie
+```
+
+**Errore 4: Build timeout o out of memory**
+```bash
+# Soluzione: Aggiungi .dockerignore per escludere file non necessari:
+echo "__pycache__" >> .dockerignore
+echo "*.pyc" >> .dockerignore
+echo ".git" >> .dockerignore
+echo "node_modules" >> .dockerignore
+echo ".venv" >> .dockerignore
+```
+
+**Errore 5: Gunicorn workers crash**
+```bash
+# Soluzione: Il Dockerfile usa 4 workers, riduci a 2 per Starter plan
+# Modifica nel Dockerfile: --workers 2
+```
+
+### **Other Cloud Platforms**
+- **Railway**: Deploy simile a Render, GitHub integration
 - **AWS ECS/Fargate**: Use the included Dockerfile
 - **Google Cloud Run**: Auto-scaling container deployment
-- **Heroku**: Git-based deployment
+- **Heroku**: Git-based deployment with Procfile
 
 ### **Production Configuration**
-- Uses `gunicorn` WSGI server
-- Configured for port 5000 by default
+- Uses `gunicorn` WSGI server with 4 workers
+- Configured for dynamic port binding (Render/Heroku compatible)
 - Health checks available at `/health`
 - Comprehensive logging and error handling
+- Docker multi-stage build for optimization
 
 ## 🧪 Testing
 
