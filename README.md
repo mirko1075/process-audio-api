@@ -272,7 +272,7 @@ echo ".venv" >> .dockerignore
 - **Railway**: Deploy simile a Render, GitHub integration
 - **AWS ECS/Fargate**: Use the included Dockerfile
 - **Google Cloud Run**: Auto-scaling container deployment
-- **Heroku**: Git-based deployment con Procfile
+- **Heroku**: Git-based deployment with Procfile
 
 ### **Production Configuration**
 - Uses `gunicorn` WSGI server with 4 workers
