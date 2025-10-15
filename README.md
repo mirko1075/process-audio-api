@@ -137,7 +137,7 @@ docker run -p 5000:5000 --env-file .env medical-transcription-api
 
 ### **Render.com Deployment** 🌐
 
-Render è una piattaforma cloud moderna ideale per il deployment di API Flask con CI/CD automatico.
+Render is a modern cloud platform ideal for deploying Flask APIs with automatic CI/CD.
 
 #### **1. Preparazione Repository**
 ```bash
