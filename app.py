@@ -1,10 +1,14 @@
-"""Flask entrypoint for the AI transcription backend."""
-from __future__ import annotations
+"""Main application entry point using Flask application factory pattern."""
 
-from api import create_app
+from flask_app import create_app
 
+# Create Flask application using application factory
 app = create_app()
 
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+if __name__ == '__main__':
+    # Development server configuration
+    app.run(
+        host='0.0.0.0',
+        port=5000,
+        debug=True
+    )
