@@ -492,11 +492,10 @@ components:
           type: string
           description: Target language
           example: "es"
-        confidence:
-          type: number
-          format: float
-          description: Translation confidence score
-          example: 0.98
+        model_used:
+          type: string
+          description: OpenAI model used for translation
+          example: "gpt-4o-mini"
       required:
         - translated_text
 

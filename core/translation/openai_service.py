@@ -6,14 +6,16 @@ from functools import lru_cache
 from typing import Dict
 
 import openai
+from openai import AuthenticationError, APIError, RateLimitError
 
 from utils.config import get_app_config
 from utils.exceptions import TranslationError
 
 
 PROMPT_TEMPLATE = (
-    "You are an expert medical translator. Translate the text to {target_language} "
-    "while preserving medical terminology and speaker intent. Input language is {source_language}."
+    "You are an expert medical translator. Translate the following text from {source_language} to {target_language}. "
+    "Preserve medical terminology, speaker intent, and maintain professional tone. "
+    "Return only the translated text without any additional commentary."
 )
 
 
@@ -25,23 +27,59 @@ class OpenAITranslator:
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def translate(self, text: str, source_language: str, target_language: str) -> Dict[str, str]:
+        if not text.strip():
+            raise TranslationError("Text cannot be empty")
+        
+        self._logger.info("Starting OpenAI translation: %s -> %s (text length: %d)", 
+                         source_language, target_language, len(text))
+        
+        # Handle "auto" source language
+        if source_language.lower() == "auto":
+            source_language = "the detected language"
+        
         prompt = PROMPT_TEMPLATE.format(
-            source_language=source_language, target_language=target_language
+            source_language=source_language, 
+            target_language=target_language
         )
+        
         try:
-            completion = self._client.responses.create(
+            self._logger.debug("Sending translation request to OpenAI")
+            completion = self._client.chat.completions.create(
                 model=self._model,
-                input=[
+                messages=[
                     {"role": "system", "content": prompt},
                     {"role": "user", "content": text},
                 ],
+                temperature=0.1,  # Low temperature for consistent translations
+                max_tokens=4000,  # Sufficient for most translations
             )
+            
+            translated_text = completion.choices[0].message.content
+            
+            if not translated_text:
+                raise TranslationError("OpenAI returned empty translation")
+            
+            self._logger.info("Translation completed successfully (output length: %d)", len(translated_text))
+            
+            return {
+                "translated_text": translated_text.strip(),
+                "source_language": source_language,
+                "target_language": target_language,
+                "model_used": self._model
+            }
+            
+        except openai.AuthenticationError as exc:
+            self._logger.error("OpenAI authentication error: %s", exc)
+            raise TranslationError("OpenAI authentication failed - check API key") from exc
+        except openai.RateLimitError as exc:
+            self._logger.error("OpenAI rate limit error: %s", exc)
+            raise TranslationError("OpenAI rate limit exceeded") from exc
+        except openai.APIError as exc:
+            self._logger.error("OpenAI API error: %s", exc)
+            raise TranslationError(f"OpenAI API error: {exc}") from exc
         except Exception as exc:
-            raise TranslationError("OpenAI translation failed") from exc
-
-        output = completion.output_text if hasattr(completion, "output_text") else completion["output_text"]
-        self._logger.debug("OpenAI translation completed (%s -> %s)", source_language, target_language)
-        return {"translated_text": output}
+            self._logger.error("Unexpected error during OpenAI translation: %s", exc, exc_info=True)
+            raise TranslationError(f"OpenAI translation failed: {str(exc)}") from exc
 
 
 @lru_cache(maxsize=1)
