@@ -147,7 +147,7 @@ git commit -m "Ready for Render deployment"
 git push origin main
 ```
 
-#### **2. Configurazione su Render**
+#### **2. Render Configuration**
 
 1. **Crea un nuovo Web Service** su [render.com](https://render.com)
 2. **Connetti il repository GitHub**: `mirko1075/process-audio-api`
