@@ -1,191 +1,103 @@
+# AI Medical Transcription Backend
 
+A production-ready Flask backend for transcribing, translating and analysing
+medical conversations. The service integrates with Deepgram Nova-2 for
+transcription, OpenAI GPT models for translation, and optional AssemblyAI /
+Google Cloud services.
 
-```markdown:README.md
-# Audio Processing API
+## Project structure
 
-A Flask-based REST API for audio processing, transcription, and analysis. This service supports multiple transcription models (AssemblyAI, OpenAI Whisper, Deepgram), sentiment analysis, and file handling capabilities.
+```
+api/
+  controllers/
+  routes/
+core/
+  transcription/
+  translation/
+  postprocessing/
+utils/
+tests/
+app.py
+```
 
-## Features
+Each layer has a single responsibility:
 
-- 🎤 Audio transcription using multiple providers:
-  - AssemblyAI
-  - OpenAI Whisper
-  - Deepgram
-- 📊 Sentiment analysis
-- 📝 Text file generation
-- 📊 Excel report generation
-- 🔒 API key authentication
-- 🎯 Multi-language support
+- **core/** contains service clients and reusable business logic.
+- **api/controllers/** orchestrate requests by combining core services.
+- **api/routes/** expose HTTP endpoints using Flask blueprints.
+- **utils/** provides configuration, logging and auth helpers.
 
-## Prerequisites
+## Getting started
 
-- Python 3.12+
-- FFmpeg installed on your system
-- Valid API keys for:
-  - AssemblyAI
-  - OpenAI
-  - Deepgram
+1. Clone the repository and install dependencies:
 
-## Installation
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
 
-1. Clone the repository:
+2. Copy `.env.example` to `.env` and populate the required API keys:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+3. Run the development server:
+
+   ```bash
+   flask --app app run --debug
+   ```
+
+4. The health check is available at `GET /health`.
+
+## Environment variables
+
+| Variable | Description |
+| --- | --- |
+| `API_KEY` | API key required in the `x-api-key` header |
+| `DEEPGRAM_API_KEY` | Deepgram Nova-2 key |
+| `OPENAI_API_KEY` | OpenAI API key for Whisper + GPT |
+| `ASSEMBLYAI_API_KEY` | Optional AssemblyAI support |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Optional Google Cloud JSON path |
+| `ALLOWED_ORIGINS` | Comma separated list for CORS |
+| `LOG_LEVEL` / `LOG_FORMAT` | Logging configuration |
+
+## Deployment
+
+A `Dockerfile` and `docker-compose.yml` are included for containerised
+deployments. On Render or AWS ECS, build the image and supply the environment
+variables listed above. The default command runs `gunicorn` bound to port 5000.
+
+## Testing
+
+Run unit tests with:
+
 ```bash
-git clone <repository-url>
-cd <project-directory>
+pytest
 ```
 
-2. Create and activate a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
+## Key endpoints
 
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/health` | Liveness probe |
+| `POST` | `/transcriptions/deepgram` | Deepgram Nova-2 transcription |
+| `POST` | `/transcriptions/whisper` | OpenAI Whisper transcription |
+| `POST` | `/translations/openai` | GPT-based translation |
+| `POST` | `/sentiment` | Medical sentiment analysis |
+| `POST` | `/documents/word` | Generate DOCX transcripts |
+| `POST` | `/reports/excel` | Build Excel summaries |
 
-4. Create a `.env` file with your API keys:
-```env
-OPENAI_API_KEY=your_openai_key
-API_KEY=your_api_key
-DEEPGRAM_API_KEY=your_deepgram_key
-ASSEMBLYAI_API_KEY=your_assemblyai_key
-```
+All endpoints require the `x-api-key` header.
 
-## Usage
+## Logging & observability
 
-Start the server:
-```bash
-python app.py
-```
+Logging is centralised in `utils/logging.py`. Switch to JSON logs by setting
+`LOG_FORMAT=json` for better integration with cloud logging platforms.
 
-The server will run on `http://localhost:5000`
+## Further improvements
 
-### API Endpoints
-
-All endpoints require an `x-api-key` header for authentication.
-
-#### 1. Process Audio
-```http
-POST /process
-Content-Type: multipart/form-data
-x-api-key: your_api_key
-
-Parameters:
-- audio: (file) Audio file to process
-- double_model: (boolean) Use both AssemblyAI and Whisper
-- language: (string) Target language code (default: "en")
-- sentiment_analysis: (boolean) Perform sentiment analysis
-- best_model: (boolean) Use best quality model
-```
-
-#### 2. Create Text File
-```http
-POST /text-to-file
-Content-Type: application/json
-x-api-key: your_api_key
-
-Body:
-{
-    "text": "Your text content",
-    "fileName": "desired_filename"
-}
-```
-
-#### 3. Process Audio to File
-```http
-POST /process-to-file
-Content-Type: multipart/form-data
-x-api-key: your_api_key
-
-Parameters:
-- audio: (file) Audio file to process
-- best_model: (boolean) Use best quality model
-```
-
-#### 4. Sentiment Analysis
-```http
-POST /sentiment-analysis
-Content-Type: multipart/form-data
-x-api-key: your_api_key
-
-Parameters:
-- file: (file) Excel file with queries
-- text: (string) Text to analyze
-- best_model: (boolean) Use best quality model
-```
-
-#### 5. Generate Excel Report
-```http
-POST /generate-excel
-Content-Type: application/json
-x-api-key: your_api_key
-
-Body:
-{
-    "sheets": [
-        {
-            "name": "Sheet1",
-            "data": [
-                ["Header1", "Header2"],
-                ["Value1", "Value2"]
-            ]
-        }
-    ]
-}
-```
-
-## Error Handling
-
-The API returns appropriate HTTP status codes:
-- 200: Success
-- 400: Bad Request
-- 401: Unauthorized (invalid API key)
-- 500: Internal Server Error
-
-## File Size Limits
-
-- Maximum audio file size: 100MB
-- Larger files are automatically split into chunks for processing
-
-## Development
-
-- Uses Flask for the web framework
-- Implements logging for debugging
-- Supports multiple audio formats (converts to WAV internally)
-- Includes cleanup of temporary files
-
-## Security
-
-- API key authentication required for all endpoints
-- Environment variables for sensitive credentials
-- Input validation and sanitization
-
-## Environment Variables
-
-Required environment variables in `.env` file:
-```env
-OPENAI_API_KEY=your_openai_api_key
-API_KEY=your_api_key
-DEEPGRAM_API_KEY=your_deepgram_api_key
-ASSEMBLYAI_API_KEY=your_assemblyai_api_key
-DEEPSEEK_API_KEY=your_deepseek_api_key
-DEEPL_API_KEY=your_deepl_api_key
-DEEPL_API_URL=https://api-free.deepl.com/v2/translate
-```
-
-## Dependencies
-
-Key dependencies include:
-- Flask
-- OpenAI
-- AssemblyAI
-- Deepgram
-- FFmpeg-python
-- Pandas
-- OpenPyXL
-- Python-dotenv
-
-For a complete list, see `requirements.txt`
-```
+- Add request tracing (e.g. OpenTelemetry) for distributed debugging.
+- Implement background processing for long-running transcription jobs.
+- Extend test coverage with mocked service clients.
