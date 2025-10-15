@@ -168,7 +168,10 @@ FLASK_APP=app.py
 FLASK_ENV=production
 PORT=5000
 
-# API Keys (Ottieni dalle rispettive piattaforme)
+# Authentication
+API_KEY=your-secure-api-key-here
+
+# AI Service API Keys (Ottieni dalle rispettive piattaforme)
 DEEPGRAM_API_KEY=your_deepgram_key_here
 OPENAI_API_KEY=your_openai_key_here
 ASSEMBLYAI_API_KEY=your_assemblyai_key_here
@@ -177,8 +180,10 @@ DEEPSEEK_API_KEY=your_deepseek_key_here
 # Google Cloud (Base64 del file credentials JSON)
 GOOGLE_APPLICATION_CREDENTIALS_JSON=base64_encoded_json_here
 
-# Optional API Keys
+# Optional Configuration
 GOOGLE_CLOUD_PROJECT_ID=your_project_id
+ALLOWED_ORIGINS=https://yourdomain.com,https://anotherdomain.com
+LOG_LEVEL=INFO
 ```
 
 #### **4. Configurazione Avanzata**
@@ -220,15 +225,47 @@ curl -X POST https://medical-transcription-api.onrender.com/transcriptions/deepg
 - **Auto-scaling**: Disponibile nei piani paid
 
 #### **🔧 Troubleshooting Render**
+
+**Errore 1: ModuleNotFoundError: No module named 'flask_cors'**
 ```bash
-# Errore common: Port binding
-# Soluzione: Render usa la variabile PORT, già configurata nel Dockerfile
+# Soluzione: Assicurati che Flask-CORS sia nel requirements.txt
+Flask-CORS==5.0.0
+```
 
-# Errore: Environment variables
-# Soluzione: Verifica che tutte le API keys siano configurate
+**Errore 2: Port binding issues**
+```bash
+# Soluzione: Render usa la variabile PORT dinamica
+# Il Dockerfile è già configurato per usare $PORT
+# Verifica che nel dashboard Render sia configurato:
+# Environment: Docker
+# Start Command: (lascia vuoto, usa il CMD del Dockerfile)
+```
 
-# Errore: Build timeout
-# Soluzione: Usa .dockerignore per escludere file non necessari
+**Errore 3: Environment variables non trovate**
+```bash
+# Soluzione: Nel dashboard Render, verifica di aver aggiunto:
+FLASK_APP=app.py
+FLASK_ENV=production
+API_KEY=your-api-key-here
+DEEPGRAM_API_KEY=your-key
+OPENAI_API_KEY=your-key
+# ... altre variabili necessarie
+```
+
+**Errore 4: Build timeout o out of memory**
+```bash
+# Soluzione: Aggiungi .dockerignore per escludere file non necessari:
+echo "__pycache__" >> .dockerignore
+echo "*.pyc" >> .dockerignore
+echo ".git" >> .dockerignore
+echo "node_modules" >> .dockerignore
+echo ".venv" >> .dockerignore
+```
+
+**Errore 5: Gunicorn workers crash**
+```bash
+# Soluzione: Il Dockerfile usa 4 workers, riduci a 2 per Starter plan
+# Modifica nel Dockerfile: --workers 2
 ```
 
 ### **Altre Piattaforme Cloud**
