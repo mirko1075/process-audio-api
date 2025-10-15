@@ -126,3 +126,100 @@ Enhanced logging now includes:
 - **Large files**: Processing time scales linearly with file size
 - **Memory usage**: Efficient - processes one chunk at a time
 - **API costs**: Same per-minute rate, just split across multiple requests
+
+## Google Cloud Translation Issues
+
+### Common Error: "Cloud Translation API has not been used in project before or it is disabled"
+
+**Error Message:**
+
+```text
+google.api_core.exceptions.Forbidden: 403 POST https://translation.googleapis.com/language/translate/v2
+Cloud Translation API has not been used in project 779105669206 before or it is disabled
+```
+
+**Cause**: The Google Cloud Translation API is not enabled for your project.
+
+**Solution:**
+
+#### 1. Enable the Translation API
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Select your project (or the project ID shown in the error)
+3. Navigate to **APIs & Services** > **Library**
+4. Search for "Cloud Translation API"
+5. Click on "Cloud Translation API" and press **Enable**
+6. Wait a few minutes for the API to be fully activated
+
+#### 2. Verify Service Account Permissions
+
+Ensure your service account has the necessary permissions:
+
+- `roles/cloudtranslate.user` - For basic translation
+- `roles/cloudtranslate.admin` - For advanced features
+
+#### 3. Check Credentials Setup
+
+1. **Service Account Key**: Ensure `google/google-credentials.json` exists
+2. **Environment Variable**: Set `GOOGLE_APPLICATION_CREDENTIALS` if needed
+3. **Project ID**: Verify the correct project ID in your credentials
+
+#### 4. Test Configuration
+
+You can test your Google Cloud setup:
+
+```bash
+# Install Google Cloud CLI (if not already installed)
+curl https://sdk.cloud.google.com | bash
+source ~/.bashrc
+
+# Authenticate and test
+gcloud auth application-default login
+gcloud translate translate "Hello world" --target-language="es"
+```
+
+### Alternative: Use OpenAI Translation
+
+If Google Cloud setup is problematic, use the OpenAI translation service instead:
+
+**Endpoint**: `POST /translations/openai`
+
+**Benefits:**
+
+- ✅ Simpler setup (just API key needed)
+- ✅ Enhanced with automatic text chunking for long texts
+- ✅ Medical-focused translation prompts
+- ✅ Supports all major languages
+- ✅ Handles texts of any length automatically
+
+**Request Example:**
+
+```json
+{
+  "text": "Patient presents with acute chest pain...",
+  "source_language": "en",
+  "target_language": "es"
+}
+```
+
+### Google Cloud Billing Issues
+
+**Error**: `QuotaExceeded` or billing-related errors
+
+**Solutions:**
+
+1. **Enable Billing**: Ensure your Google Cloud project has billing enabled
+2. **Check Quotas**: Visit Cloud Console > IAM & Admin > Quotas
+3. **Increase Limits**: Request quota increases if needed
+4. **Monitor Usage**: Set up billing alerts to track usage
+
+### Authentication Errors
+
+**Error**: `Unauthenticated` - Invalid credentials
+
+**Solutions:**
+
+1. **Regenerate Key**: Download a new service account key
+2. **File Permissions**: Ensure the credentials file is readable
+3. **Path Issues**: Verify the path to `google-credentials.json`
+4. **Key Format**: Ensure the JSON file is valid and complete
