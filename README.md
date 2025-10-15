@@ -43,6 +43,8 @@ app.py                        # Main application entry point
 
 ## 🚀 Getting Started
 
+**Requirements**: Python 3.10+ (recommended Python 3.11 or 3.12)
+
 1. **Clone the repository and install dependencies:**
 
    ```bash
