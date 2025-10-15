@@ -203,7 +203,7 @@ Render utilizzerà automaticamente il `Dockerfile` presente nel repository:
 # - Health checks
 ```
 
-#### **6. Deploy e Verifica**
+#### **6. Deploy and Verification**
 ```bash
 # URL del tuo servizio (esempio):
 https://medical-transcription-api.onrender.com
