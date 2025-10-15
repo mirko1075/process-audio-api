@@ -189,7 +189,7 @@ LOG_LEVEL=INFO
 #### **4. Configurazione Avanzata**
 ```bash
 # Instance Type: Starter (512MB RAM) o Standard (2GB RAM)
-# Auto-Deploy: Yes (per CI/CD automatico)
+# Auto-Deploy: Yes (for automatic CI/CD)
 # Health Check Path: /health
 ```
 
