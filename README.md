@@ -279,7 +279,7 @@ echo ".venv" >> .dockerignore
 - Configured for dynamic port binding (Render/Heroku compatible)
 - Health checks available at `/health`
 - Comprehensive logging and error handling
-- Docker multi-stage build per ottimizzazione
+- Docker multi-stage build for optimization
 
 ## 🧪 Testing
 
