@@ -135,17 +135,114 @@ docker build -t medical-transcription-api .
 docker run -p 5000:5000 --env-file .env medical-transcription-api
 ```
 
-### **Production Platforms**
-- **Render/Railway**: Deploy directly from GitHub
+### **Render.com Deployment** 🌐
+
+Render è una piattaforma cloud moderna ideale per il deployment di API Flask con CI/CD automatico.
+
+#### **1. Preparazione Repository**
+```bash
+# Assicurati che il tuo repository sia pushato su GitHub
+git add .
+git commit -m "Ready for Render deployment"
+git push origin main
+```
+
+#### **2. Configurazione su Render**
+
+1. **Crea un nuovo Web Service** su [render.com](https://render.com)
+2. **Connetti il repository GitHub**: `mirko1075/process-audio-api`
+3. **Configura il servizio**:
+   ```
+   Name: medical-transcription-api
+   Environment: Docker
+   Branch: main
+   Dockerfile Path: ./Dockerfile
+   ```
+
+#### **3. Variabili d'Ambiente**
+Aggiungi tutte le seguenti environment variables nel dashboard Render:
+
+```bash
+# Core Configuration
+FLASK_APP=app.py
+FLASK_ENV=production
+PORT=5000
+
+# API Keys (Ottieni dalle rispettive piattaforme)
+DEEPGRAM_API_KEY=your_deepgram_key_here
+OPENAI_API_KEY=your_openai_key_here
+ASSEMBLYAI_API_KEY=your_assemblyai_key_here
+DEEPSEEK_API_KEY=your_deepseek_key_here
+
+# Google Cloud (Base64 del file credentials JSON)
+GOOGLE_APPLICATION_CREDENTIALS_JSON=base64_encoded_json_here
+
+# Optional API Keys
+GOOGLE_CLOUD_PROJECT_ID=your_project_id
+```
+
+#### **4. Configurazione Avanzata**
+```bash
+# Instance Type: Starter (512MB RAM) o Standard (2GB RAM)
+# Auto-Deploy: Yes (per CI/CD automatico)
+# Health Check Path: /health
+```
+
+#### **5. Build Commands**
+Render utilizzerà automaticamente il `Dockerfile` presente nel repository:
+```dockerfile
+# Il Dockerfile gestisce automaticamente:
+# - Installazione dipendenze da requirements.txt
+# - Configurazione gunicorn con 4 workers
+# - Esposizione porta 5000
+# - Health checks
+```
+
+#### **6. Deploy e Verifica**
+```bash
+# URL del tuo servizio (esempio):
+https://medical-transcription-api.onrender.com
+
+# Test health check:
+curl https://medical-transcription-api.onrender.com/health
+
+# Test endpoint di esempio:
+curl -X POST https://medical-transcription-api.onrender.com/transcriptions/deepgram \
+  -H "x-api-key: your-api-key" \
+  -F "audio=@test.mp3" \
+  -F "language=en"
+```
+
+#### **7. Monitoraggio**
+- **Logs**: Visualizza in tempo reale nel dashboard Render
+- **Metrics**: CPU, Memory, Request count automatici
+- **Alerts**: Configura notifiche per downtime
+- **Auto-scaling**: Disponibile nei piani paid
+
+#### **🔧 Troubleshooting Render**
+```bash
+# Errore common: Port binding
+# Soluzione: Render usa la variabile PORT, già configurata nel Dockerfile
+
+# Errore: Environment variables
+# Soluzione: Verifica che tutte le API keys siano configurate
+
+# Errore: Build timeout
+# Soluzione: Usa .dockerignore per escludere file non necessari
+```
+
+### **Altre Piattaforme Cloud**
+- **Railway**: Deploy simile a Render, GitHub integration
 - **AWS ECS/Fargate**: Use the included Dockerfile
 - **Google Cloud Run**: Auto-scaling container deployment
-- **Heroku**: Git-based deployment
+- **Heroku**: Git-based deployment con Procfile
 
 ### **Production Configuration**
-- Uses `gunicorn` WSGI server
-- Configured for port 5000 by default
+- Uses `gunicorn` WSGI server with 4 workers
+- Configured for dynamic port binding (Render/Heroku compatible)
 - Health checks available at `/health`
 - Comprehensive logging and error handling
+- Docker multi-stage build per ottimizzazione
 
 ## 🧪 Testing
 
