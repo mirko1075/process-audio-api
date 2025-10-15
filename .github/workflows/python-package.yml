@@ -24,6 +24,10 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: ${{ matrix.python-version }}
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
@@ -37,6 +41,14 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Set PYTHONPATH
       run: echo "PYTHONPATH=$PYTHONPATH:$(pwd)" >> $GITHUB_ENV
+    - name: Set test environment variables
+      run: |
+        echo "API_KEY=test-api-key" >> $GITHUB_ENV
+        echo "DEEPGRAM_API_KEY=test-deepgram-key" >> $GITHUB_ENV
+        echo "OPENAI_API_KEY=test-openai-key" >> $GITHUB_ENV
+        echo "ASSEMBLYAI_API_KEY=test-assemblyai-key" >> $GITHUB_ENV
+        echo "DEEPSEEK_API_KEY=test-deepseek-key" >> $GITHUB_ENV
+        echo "FLASK_ENV=testing" >> $GITHUB_ENV
     - name: Test with pytest
       run: |
-        pytest
+        pytest -v --tb=short
