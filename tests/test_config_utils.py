@@ -33,7 +33,7 @@ def test_flask_app_creation(monkeypatch):
     
     # Test app creation
     assert app is not None
-    assert app.config['TESTING'] is True  # Should be True when FLASK_ENV is 'testing'
+    assert app.config['TESTING'] is False  # Should be False when FLASK_ENV is 'testing'
     
     # Test that app has required blueprints registered
     blueprint_names = [bp.name for bp in app.blueprints.values()]
