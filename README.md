@@ -141,7 +141,7 @@ Render is a modern cloud platform ideal for deploying Flask APIs with automatic 
 
 #### **1. Preparazione Repository**
 ```bash
-# Assicurati che il tuo repository sia pushato su GitHub
+# Make sure your repository is pushed to GitHub
 git add .
 git commit -m "Ready for Render deployment"
 git push origin main
