@@ -1,0 +1,619 @@
+{
+  "info": {
+    "name": "AI Medical Transcription Backend",
+    "description": "A production-ready Flask backend for transcribing, translating and analysing medical conversations. The service integrates with Deepgram Nova-2 for transcription, OpenAI GPT models for translation, and optional AssemblyAI / Google Cloud services.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "12345678-1234-1234-1234-123456789012",
+    "version": {
+      "major": 1,
+      "minor": 0,
+      "patch": 0
+    }
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Return a simple health payload used by orchestrators"
+          },
+          "response": [
+            {
+              "name": "Service is healthy",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["health"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"status\": \"ok\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Transcription",
+      "item": [
+        {
+          "name": "Transcribe with Deepgram",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "audio",
+                  "type": "file",
+                  "src": "",
+                  "description": "Audio file to transcribe"
+                },
+                {
+                  "key": "language",
+                  "value": "en",
+                  "type": "text",
+                  "description": "Language code for transcription"
+                },
+                {
+                  "key": "model",
+                  "value": "nova-2",
+                  "type": "text",
+                  "description": "Deepgram model to use"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transcriptions/deepgram",
+              "host": ["{{baseUrl}}"],
+              "path": ["transcriptions", "deepgram"]
+            },
+            "description": "Upload an audio file to transcribe using Deepgram's Nova-2 model"
+          },
+          "response": [
+            {
+              "name": "Transcription successful",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{apiKey}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "audio",
+                      "type": "file",
+                      "src": ""
+                    },
+                    {
+                      "key": "language",
+                      "value": "en",
+                      "type": "text"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/transcriptions/deepgram",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["transcriptions", "deepgram"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"text\": \"Hello, this is a sample transcription of the audio file.\",\n  \"confidence\": 0.95,\n  \"language\": \"en\",\n  \"duration\": 30.5\n}"
+            }
+          ]
+        },
+        {
+          "name": "Transcribe with Whisper",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "audio",
+                  "type": "file",
+                  "src": "",
+                  "description": "Audio file to transcribe"
+                },
+                {
+                  "key": "language",
+                  "value": "en",
+                  "type": "text",
+                  "description": "Language code for transcription (optional)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transcriptions/whisper",
+              "host": ["{{baseUrl}}"],
+              "path": ["transcriptions", "whisper"]
+            },
+            "description": "Upload an audio file to transcribe using OpenAI's Whisper model. Large files (>24MB) are automatically split into chunks and processed sequentially. No manual file size limit."
+          },
+          "response": [
+            {
+              "name": "Small File Transcription",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{apiKey}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "audio",
+                      "type": "file",
+                      "src": ""
+                    },
+                    {
+                      "key": "language",
+                      "value": "en",
+                      "type": "text"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/transcriptions/whisper",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["transcriptions", "whisper"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"transcript\": \"Hello, this is a sample transcription of a small audio file.\"\n}"
+            },
+            {
+              "name": "Large File with Chunking",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{apiKey}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "audio",
+                      "type": "file",
+                      "src": ""
+                    },
+                    {
+                      "key": "language",
+                      "value": "en",
+                      "type": "text"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/transcriptions/whisper",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["transcriptions", "whisper"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"transcript\": \"This is the first part of a long audio file. The transcription continues from the second chunk. And this is the final part transcribed from the last chunk.\",\n  \"chunks_processed\": 3,\n  \"total_chunks\": 3,\n  \"chunk_duration_minutes\": 10\n}"
+            }
+          ]
+        },
+        {
+          "name": "Transcribe with AssemblyAI",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "audio",
+                  "type": "file",
+                  "src": "",
+                  "description": "Audio file to transcribe"
+                },
+                {
+                  "key": "language",
+                  "value": "en",
+                  "type": "text",
+                  "description": "Language code for transcription"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transcriptions/assemblyai",
+              "host": ["{{baseUrl}}"],
+              "path": ["transcriptions", "assemblyai"]
+            },
+            "description": "Upload an audio file to transcribe using AssemblyAI service"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Translation",
+      "item": [
+        {
+          "name": "Translate with OpenAI",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Hello, how are you?\",\n  \"source_language\": \"en\",\n  \"target_language\": \"es\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/translations/openai",
+              "host": ["{{baseUrl}}"],
+              "path": ["translations", "openai"]
+            },
+            "description": "Translate text from one language to another using OpenAI's GPT models"
+          },
+          "response": [
+            {
+              "name": "Translation successful",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{apiKey}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"text\": \"Hello, how are you?\",\n  \"source_language\": \"en\",\n  \"target_language\": \"es\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/translations/openai",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["translations", "openai"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"translated_text\": \"Hola, ¿cómo estás?\",\n  \"source_language\": \"en\",\n  \"target_language\": \"es\",\n  \"confidence\": 0.98\n}"
+            }
+          ]
+        },
+        {
+          "name": "Translate with Google",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Hello, how are you?\",\n  \"target_language\": \"es\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/translations/google",
+              "host": ["{{baseUrl}}"],
+              "path": ["translations", "google"]
+            },
+            "description": "Translate text using Google Cloud Translation service"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Post-processing",
+      "item": [
+        {
+          "name": "Sentiment Analysis",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"The patient seems to be feeling much better today.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/sentiment",
+              "host": ["{{baseUrl}}"],
+              "path": ["sentiment"]
+            },
+            "description": "Perform medical sentiment analysis on provided text"
+          },
+          "response": [
+            {
+              "name": "Sentiment analysis successful",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{apiKey}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"text\": \"The patient seems to be feeling much better today.\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/sentiment",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["sentiment"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"sentiment\": \"positive\",\n  \"confidence\": 0.87,\n  \"scores\": {\n    \"positive\": 0.75,\n    \"negative\": 0.15,\n    \"neutral\": 0.10\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Generate Word Document",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "text",
+                  "value": "This is the content of the medical transcript that will be included in the Word document.",
+                  "type": "text",
+                  "description": "Text content for the document"
+                },
+                {
+                  "key": "fileName",
+                  "value": "medical_report.docx",
+                  "type": "text",
+                  "description": "Name of the generated file"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/documents/word",
+              "host": ["{{baseUrl}}"],
+              "path": ["documents", "word"]
+            },
+            "description": "Create a DOCX document from provided text content"
+          },
+          "response": []
+        },
+        {
+          "name": "Generate Excel Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sheets\": [\n    {\n      \"name\": \"Summary\",\n      \"data\": [\n        [\"Patient ID\", \"Date\", \"Sentiment\", \"Confidence\"],\n        [\"P001\", \"2024-01-15\", \"positive\", 0.87],\n        [\"P002\", \"2024-01-16\", \"neutral\", 0.65]\n      ]\n    },\n    {\n      \"name\": \"Transcriptions\",\n      \"data\": [\n        [\"ID\", \"Text\", \"Duration\"],\n        [\"T001\", \"Patient reports feeling better\", 30.5],\n        [\"T002\", \"Follow-up appointment scheduled\", 15.2]\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/reports/excel",
+              "host": ["{{baseUrl}}"],
+              "path": ["reports", "excel"]
+            },
+            "description": "Build an Excel workbook with multiple sheets from provided data"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string",
+      "description": "Base URL for the API"
+    },
+    {
+      "key": "apiKey",
+      "value": "your-api-key-here",
+      "type": "string",
+      "description": "API key for authentication (x-api-key header)"
+    }
+  ]
+}

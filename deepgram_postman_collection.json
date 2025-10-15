@@ -1,0 +1,568 @@
+{
+  "info": {
+    "name": "Deepgram API Direct Requests",
+    "description": "Direct API calls to Deepgram's transcription and analysis services, bypassing the Flask backend. Use this collection to test Deepgram API directly or for debugging purposes.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "87654321-4321-4321-4321-210987654321",
+    "version": {
+      "major": 1,
+      "minor": 0,
+      "patch": 0
+    }
+  },
+  "item": [
+    {
+      "name": "Transcription",
+      "item": [
+        {
+          "name": "Direct Audio Transcription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Token {{deepgramApiKey}}",
+                "type": "text",
+                "description": "Deepgram API key with Token prefix"
+              },
+              {
+                "key": "Content-Type",
+                "value": "audio/wav",
+                "type": "text",
+                "description": "Audio content type (adjust based on your file format)"
+              }
+            ],
+            "body": {
+              "mode": "file",
+              "file": {
+                "src": "",
+                "description": "Select your audio file (wav, mp3, mp4, etc.)"
+              }
+            },
+            "url": {
+              "raw": "https://api.deepgram.com/v1/listen?model={{deepgramModel}}&language={{language}}&punctuate=true&diarize=true",
+              "protocol": "https",
+              "host": [
+                "api",
+                "deepgram",
+                "com"
+              ],
+              "path": [
+                "v1",
+                "listen"
+              ],
+              "query": [
+                {
+                  "key": "model",
+                  "value": "{{deepgramModel}}",
+                  "description": "Deepgram model to use (nova-2, nova, base, enhanced, etc.)"
+                },
+                {
+                  "key": "language",
+                  "value": "{{language}}",
+                  "description": "Language code (en, es, fr, etc.)"
+                },
+                {
+                  "key": "punctuate",
+                  "value": "true",
+                  "description": "Add punctuation to transcription"
+                },
+                {
+                  "key": "diarize",
+                  "value": "true",
+                  "description": "Enable speaker diarization"
+                }
+              ]
+            },
+            "description": "Direct transcription of audio files using Deepgram API. Upload audio file as binary data."
+          },
+          "response": [
+            {
+              "name": "Successful Transcription",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Token {{deepgramApiKey}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "audio/wav",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "file",
+                  "file": {
+                    "src": ""
+                  }
+                },
+                "url": {
+                  "raw": "https://api.deepgram.com/v1/listen?model=nova-2&language=en&punctuate=true&diarize=true",
+                  "protocol": "https",
+                  "host": [
+                    "api",
+                    "deepgram",
+                    "com"
+                  ],
+                  "path": [
+                    "v1",
+                    "listen"
+                  ],
+                  "query": [
+                    {
+                      "key": "model",
+                      "value": "nova-2"
+                    },
+                    {
+                      "key": "language",
+                      "value": "en"
+                    },
+                    {
+                      "key": "punctuate",
+                      "value": "true"
+                    },
+                    {
+                      "key": "diarize",
+                      "value": "true"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"metadata\": {\n    \"transaction_key\": \"deprecated\",\n    \"request_id\": \"12345678-1234-1234-1234-123456789012\",\n    \"sha256\": \"abc123def456...\",\n    \"created\": \"2024-01-15T10:30:00.000Z\",\n    \"duration\": 30.5,\n    \"channels\": 1,\n    \"models\": [\"nova-2\"]\n  },\n  \"results\": {\n    \"channels\": [\n      {\n        \"alternatives\": [\n          {\n            \"transcript\": \"Hello, this is a sample transcription of the audio file with proper punctuation and speaker identification.\",\n            \"confidence\": 0.95,\n            \"words\": [\n              {\n                \"word\": \"hello\",\n                \"start\": 0.0,\n                \"end\": 0.5,\n                \"confidence\": 0.98,\n                \"speaker\": 0\n              }\n            ]\n          }\n        ]\n      }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "URL-based Audio Transcription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Token {{deepgramApiKey}}",
+                "type": "text",
+                "description": "Deepgram API key with Token prefix"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://example.com/path/to/your/audio/file.wav\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://api.deepgram.com/v1/listen?model={{deepgramModel}}&language={{language}}&punctuate=true&diarize=true&smart_format=true",
+              "protocol": "https",
+              "host": [
+                "api",
+                "deepgram",
+                "com"
+              ],
+              "path": [
+                "v1",
+                "listen"
+              ],
+              "query": [
+                {
+                  "key": "model",
+                  "value": "{{deepgramModel}}",
+                  "description": "Deepgram model to use"
+                },
+                {
+                  "key": "language",
+                  "value": "{{language}}",
+                  "description": "Language code"
+                },
+                {
+                  "key": "punctuate",
+                  "value": "true",
+                  "description": "Add punctuation"
+                },
+                {
+                  "key": "diarize",
+                  "value": "true",
+                  "description": "Speaker diarization"
+                },
+                {
+                  "key": "smart_format",
+                  "value": "true",
+                  "description": "Apply smart formatting"
+                }
+              ]
+            },
+            "description": "Transcribe audio from a publicly accessible URL using Deepgram API."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Text Intelligence",
+      "item": [
+        {
+          "name": "Sentiment Analysis",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Token {{deepgramApiKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"The patient seems to be feeling much better today. The treatment is working well and there are no concerning side effects.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://api.deepgram.com/v1/read?sentiment=true&summarize=v2",
+              "protocol": "https",
+              "host": [
+                "api",
+                "deepgram",
+                "com"
+              ],
+              "path": [
+                "v1",
+                "read"
+              ],
+              "query": [
+                {
+                  "key": "sentiment",
+                  "value": "true",
+                  "description": "Enable sentiment analysis"
+                },
+                {
+                  "key": "summarize",
+                  "value": "v2",
+                  "description": "Enable text summarization"
+                }
+              ]
+            },
+            "description": "Analyze sentiment and generate summary of provided text using Deepgram's text intelligence API."
+          },
+          "response": [
+            {
+              "name": "Sentiment Analysis Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Token {{deepgramApiKey}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"text\": \"The patient seems to be feeling much better today. The treatment is working well and there are no concerning side effects.\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "https://api.deepgram.com/v1/read?sentiment=true&summarize=v2",
+                  "protocol": "https",
+                  "host": [
+                    "api",
+                    "deepgram",
+                    "com"
+                  ],
+                  "path": [
+                    "v1",
+                    "read"
+                  ],
+                  "query": [
+                    {
+                      "key": "sentiment",
+                      "value": "true"
+                    },
+                    {
+                      "key": "summarize",
+                      "value": "v2"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"metadata\": {\n    \"request_id\": \"12345678-1234-1234-1234-123456789012\",\n    \"created\": \"2024-01-15T10:30:00.000Z\"\n  },\n  \"results\": {\n    \"sentiment\": {\n      \"segments\": [\n        {\n          \"text\": \"The patient seems to be feeling much better today.\",\n          \"start_word\": 0,\n          \"end_word\": 10,\n          \"sentiment\": \"positive\",\n          \"sentiment_score\": 0.85\n        }\n      ],\n      \"average\": {\n        \"sentiment\": \"positive\",\n        \"sentiment_score\": 0.85\n      }\n    },\n    \"summary\": {\n      \"text\": \"Patient is improving with current treatment and experiencing no side effects.\"\n    }\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Advanced Features",
+      "item": [
+        {
+          "name": "Streaming Transcription (WebSocket)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Token {{deepgramApiKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Upgrade",
+                "value": "websocket",
+                "type": "text"
+              },
+              {
+                "key": "Connection",
+                "value": "Upgrade",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "wss://api.deepgram.com/v1/listen?model={{deepgramModel}}&language={{language}}&punctuate=true&interim_results=true",
+              "protocol": "wss",
+              "host": [
+                "api",
+                "deepgram",
+                "com"
+              ],
+              "path": [
+                "v1",
+                "listen"
+              ],
+              "query": [
+                {
+                  "key": "model",
+                  "value": "{{deepgramModel}}",
+                  "description": "Deepgram model for streaming"
+                },
+                {
+                  "key": "language",
+                  "value": "{{language}}",
+                  "description": "Language code"
+                },
+                {
+                  "key": "punctuate",
+                  "value": "true",
+                  "description": "Add punctuation"
+                },
+                {
+                  "key": "interim_results",
+                  "value": "true",
+                  "description": "Get partial results during streaming"
+                }
+              ]
+            },
+            "description": "WebSocket connection for real-time streaming transcription. Note: This requires WebSocket support in your client."
+          },
+          "response": []
+        },
+        {
+          "name": "Batch Transcription with Keywords",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Token {{deepgramApiKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "audio/wav",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "file",
+              "file": {
+                "src": ""
+              }
+            },
+            "url": {
+              "raw": "https://api.deepgram.com/v1/listen?model={{deepgramModel}}&language={{language}}&keywords=medical:3&keywords=patient:2&keywords=treatment:2&search=symptoms&search=diagnosis",
+              "protocol": "https",
+              "host": [
+                "api",
+                "deepgram",
+                "com"
+              ],
+              "path": [
+                "v1",
+                "listen"
+              ],
+              "query": [
+                {
+                  "key": "model",
+                  "value": "{{deepgramModel}}",
+                  "description": "Deepgram model"
+                },
+                {
+                  "key": "language",
+                  "value": "{{language}}",
+                  "description": "Language code"
+                },
+                {
+                  "key": "keywords",
+                  "value": "medical:3",
+                  "description": "Boost 'medical' keyword with weight 3"
+                },
+                {
+                  "key": "keywords",
+                  "value": "patient:2",
+                  "description": "Boost 'patient' keyword with weight 2"
+                },
+                {
+                  "key": "keywords",
+                  "value": "treatment:2",
+                  "description": "Boost 'treatment' keyword with weight 2"
+                },
+                {
+                  "key": "search",
+                  "value": "symptoms",
+                  "description": "Search for 'symptoms' in transcript"
+                },
+                {
+                  "key": "search",
+                  "value": "diagnosis",
+                  "description": "Search for 'diagnosis' in transcript"
+                }
+              ]
+            },
+            "description": "Transcription with medical keyword boosting and search terms for medical conversations."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-set Deepgram API key from environment if not already set",
+          "if (!pm.environment.get('deepgramApiKey')) {",
+          "    pm.environment.set('deepgramApiKey', 'your-deepgram-api-key-here');",
+          "}",
+          "",
+          "// Set default model if not specified",
+          "if (!pm.environment.get('deepgramModel')) {",
+          "    pm.environment.set('deepgramModel', 'nova-2');",
+          "}",
+          "",
+          "// Set default language if not specified",
+          "if (!pm.environment.get('language')) {",
+          "    pm.environment.set('language', 'en');",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Basic response validation",
+          "pm.test('Response status code is 200', function () {",
+          "    pm.response.to.have.status(200);",
+          "});",
+          "",
+          "pm.test('Response time is less than 30 seconds', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(30000);",
+          "});",
+          "",
+          "// Validate JSON response structure for transcription endpoints",
+          "if (pm.request.url.path.includes('listen')) {",
+          "    pm.test('Response has valid transcription structure', function () {",
+          "        const jsonData = pm.response.json();",
+          "        pm.expect(jsonData).to.have.property('metadata');",
+          "        pm.expect(jsonData).to.have.property('results');",
+          "        pm.expect(jsonData.results).to.have.property('channels');",
+          "    });",
+          "}",
+          "",
+          "// Validate JSON response structure for text intelligence endpoints",
+          "if (pm.request.url.path.includes('read')) {",
+          "    pm.test('Response has valid text intelligence structure', function () {",
+          "        const jsonData = pm.response.json();",
+          "        pm.expect(jsonData).to.have.property('metadata');",
+          "        pm.expect(jsonData).to.have.property('results');",
+          "    });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "deepgramApiKey",
+      "value": "a9ed36de90941b16de6c1c8da92089aca9e17418",
+      "type": "string",
+      "description": "Your Deepgram API key (from .env file)"
+    },
+    {
+      "key": "deepgramModel",
+      "value": "nova-2",
+      "type": "string",
+      "description": "Deepgram model to use (nova-2, nova, base, enhanced, etc.)"
+    },
+    {
+      "key": "language",
+      "value": "en",
+      "type": "string",
+      "description": "Language code for transcription (en, es, fr, it, etc.)"
+    },
+    {
+      "key": "deepgramBaseUrl",
+      "value": "https://api.deepgram.com/v1",
+      "type": "string",
+      "description": "Deepgram API base URL"
+    }
+  ]
+}
