@@ -387,7 +387,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\n  \"translated_text\": \"Hola, ¿cómo estás?\",\n  \"source_language\": \"en\",\n  \"target_language\": \"es\",\n  \"model_used\": \"gpt-4o-mini\"\n}"
+              "body": "{\n  \"translated_text\": \"Hola, ¿cómo estás?\",\n  \"source_language\": \"en\",\n  \"target_language\": \"es\",\n  \"model_used\": \"gpt-4o-mini\",\n  \"chunks_processed\": 1,\n  \"total_chunks\": 1\n}"
             }
           ]
         },

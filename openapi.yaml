@@ -477,31 +477,42 @@ components:
       required:
         - transcript
 
-    TranslationResponse:
-      type: object
-      properties:
-        translated_text:
-          type: string
-          description: Translated text
-          example: "Hola, ¿cómo estás?"
-        source_language:
-          type: string
-          description: Source language detected or specified
-          example: "en"
-        target_language:
-          type: string
-          description: Target language
-          example: "es"
-        model_used:
-          type: string
-          description: OpenAI model used for translation
-          example: "gpt-4o-mini"
-      required:
-        - translated_text
+      TranslationResponse:
+        type: object
+        properties:
+          translated_text:
+            type: string
+            description: The translated text
+            example: "El paciente presenta dolor en el pecho y niveles elevados de troponina"
+          source_language:
+            type: string
+            description: Source language of the original text
+            example: "English"
+          target_language:
+            type: string
+            description: Target language for translation
+            example: "Spanish"
+          model_used:
+            type: string
+            description: The translation model/service used
+            example: "gpt-4o-mini"
+          chunks_processed:
+            type: integer
+            description: Number of text chunks processed (only present for long texts)
+            example: 3
+          total_chunks:
+            type: integer
+            description: Total number of chunks the text was split into (only present for long texts)
+            example: 3
+        required:
+          - translated_text
+          - source_language
+          - target_language
+          - model_used
 
-    SentimentResponse:
-      type: object
-      properties:
+      SentimentResponse:
+        type: object
+        properties:
         sentiment:
           type: string
           enum: ["positive", "negative", "neutral"]
@@ -530,8 +541,8 @@ components:
               type: number
               format: float
               example: 0.10
-      required:
-        - sentiment
+        required:
+          - sentiment
 
     ErrorResponse:
       type: object
