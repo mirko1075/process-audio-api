@@ -137,17 +137,17 @@ docker run -p 5000:5000 --env-file .env medical-transcription-api
 
 ### **Render.com Deployment** 🌐
 
-Render è una piattaforma cloud moderna ideale per il deployment di API Flask con CI/CD automatico.
+Render is a modern cloud platform ideal for deploying Flask APIs with automatic CI/CD.
 
 #### **1. Preparazione Repository**
 ```bash
-# Assicurati che il tuo repository sia pushato su GitHub
+# Make sure your repository is pushed to GitHub
 git add .
 git commit -m "Ready for Render deployment"
 git push origin main
 ```
 
-#### **2. Configurazione su Render**
+#### **2. Render Configuration**
 
 1. **Crea un nuovo Web Service** su [render.com](https://render.com)
 2. **Connetti il repository GitHub**: `mirko1075/process-audio-api`
@@ -160,7 +160,7 @@ git push origin main
    ```
 
 #### **3. Variabili d'Ambiente**
-Aggiungi tutte le seguenti environment variables nel dashboard Render:
+Add all the following environment variables in the Render dashboard:
 
 ```bash
 # Core Configuration
@@ -171,7 +171,7 @@ PORT=5000
 # Authentication
 API_KEY=your-secure-api-key-here
 
-# AI Service API Keys (Ottieni dalle rispettive piattaforme)
+# AI Service API Keys (Obtain from respective platforms)
 DEEPGRAM_API_KEY=your_deepgram_key_here
 OPENAI_API_KEY=your_openai_key_here
 ASSEMBLYAI_API_KEY=your_assemblyai_key_here
@@ -189,7 +189,7 @@ LOG_LEVEL=INFO
 #### **4. Configurazione Avanzata**
 ```bash
 # Instance Type: Starter (512MB RAM) o Standard (2GB RAM)
-# Auto-Deploy: Yes (per CI/CD automatico)
+# Auto-Deploy: Yes (for automatic CI/CD)
 # Health Check Path: /health
 ```
 
@@ -210,7 +210,7 @@ Render utilizzerà automaticamente il `Dockerfile` presente nel repository:
 gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 900 --keep-alive 5 --max-requests 50 --preload
 ```
 
-#### **6. Deploy e Verifica**
+#### **6. Deploy and Verification**
 ```bash
 # URL del tuo servizio (esempio):
 https://medical-transcription-api.onrender.com
@@ -294,18 +294,18 @@ echo ".venv" >> .dockerignore
 # - Delay 0.5s tra chunk per evitare rate limiting
 ```
 
-### **Altre Piattaforme Cloud**
+### **Other Cloud Platforms**
 - **Railway**: Deploy simile a Render, GitHub integration
 - **AWS ECS/Fargate**: Use the included Dockerfile
 - **Google Cloud Run**: Auto-scaling container deployment
-- **Heroku**: Git-based deployment con Procfile
+- **Heroku**: Git-based deployment with Procfile
 
 ### **Production Configuration**
 - Uses `gunicorn` WSGI server with 4 workers
 - Configured for dynamic port binding (Render/Heroku compatible)
 - Health checks available at `/health`
 - Comprehensive logging and error handling
-- Docker multi-stage build per ottimizzazione
+- Docker multi-stage build for optimization
 
 ## 🧪 Testing
 
