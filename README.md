@@ -160,7 +160,7 @@ git push origin main
    ```
 
 #### **3. Variabili d'Ambiente**
-Aggiungi tutte le seguenti environment variables nel dashboard Render:
+Add all the following environment variables in the Render dashboard:
 
 ```bash
 # Core Configuration
