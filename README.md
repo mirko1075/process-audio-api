@@ -171,7 +171,7 @@ PORT=5000
 # Authentication
 API_KEY=your-secure-api-key-here
 
-# AI Service API Keys (Ottieni dalle rispettive piattaforme)
+# AI Service API Keys (Obtain from respective platforms)
 DEEPGRAM_API_KEY=your_deepgram_key_here
 OPENAI_API_KEY=your_openai_key_here
 ASSEMBLYAI_API_KEY=your_assemblyai_key_here
