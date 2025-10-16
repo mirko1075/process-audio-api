@@ -172,6 +172,138 @@ FLASK_ENV=production
 PORT=5000
 
 # Authentication
+# 🔐 Authentication System
+
+This API supports **dual authentication modes** to accommodate both SaaS users and automated integrations:
+
+## **Authentication Methods**
+
+### **1. JWT Authentication (Recommended for SaaS)**
+For web applications and user-facing interfaces:
+
+```bash
+# Register new user
+curl -X POST https://your-api.com/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "securepassword",
+    "first_name": "John",
+    "last_name": "Doe",
+    "company": "Acme Corp"
+  }'
+
+# Response includes JWT token and API key
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "api_key": "usr_123_AbCdEf...",
+  "user": { ... }
+}
+
+# Use JWT for authenticated requests
+curl -X POST https://your-api.com/transcriptions/deepgram \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
+  -F "audio=@recording.wav"
+```
+
+### **2. API Key Authentication (For Integrations)**
+For Make.com, Zapier, scripts, and automated workflows:
+
+```bash
+# Use API key in header
+curl -X POST https://your-api.com/transcriptions/deepgram \
+  -H "x-api-key: usr_123_AbCdEf123456..." \
+  -F "audio=@recording.wav"
+```
+
+### **3. Legacy Support**
+Existing integrations continue to work with the original static API key.
+
+## **User Management**
+
+### **Registration & Login**
+```bash
+# Register
+POST /auth/register
+{
+  "email": "user@example.com",
+  "password": "password123",
+  "first_name": "John",
+  "last_name": "Doe",
+  "company": "Acme Corp",
+  "plan": "pro"  // optional: free, pro, enterprise
+}
+
+# Login
+POST /auth/login
+{
+  "email": "user@example.com", 
+  "password": "password123"
+}
+```
+
+### **API Key Management**
+```bash
+# Get profile and API keys
+GET /auth/profile
+Authorization: Bearer <jwt-token>
+
+# Create new API key
+POST /auth/api-keys
+Authorization: Bearer <jwt-token>
+{
+  "name": "Make.com Integration"
+}
+
+# Deactivate API key
+DELETE /auth/api-keys/{keyId}
+Authorization: Bearer <jwt-token>
+```
+
+## **Database Setup**
+
+### **Development (Docker)**
+```bash
+# Start PostgreSQL
+docker compose up -d db
+
+# Initialize database with admin user
+python scripts/init_db.py
+
+# Admin credentials:
+# Email: admin@example.com
+# Password: admin123
+# API Key: usr_1_...
+```
+
+### **Production (Render/Railway)**
+Set environment variables:
+```env
+DATABASE_URL=postgresql://user:pass@host:5432/dbname
+JWT_SECRET_KEY=your-jwt-secret-key
+SECRET_KEY=your-flask-secret-key
+API_KEY=your-legacy-api-key  # for backward compatibility
+```
+
+## **User Plans & Limits**
+
+| Plan | Monthly API Calls | Audio Hours | Price |
+|------|-------------------|-------------|-------|
+| **Free** | 100 | 2 hours | $0 |
+| **Pro** | 10,000 | 50 hours | $29/month |
+| **Enterprise** | Unlimited | Unlimited | Custom |
+
+## **Security Features**
+
+- 🔐 **Password Hashing**: bcrypt with salt
+- 🎫 **JWT Tokens**: Secure user sessions  
+- 🔑 **API Key Format**: `usr_{user_id}_{random_token}`
+- 📊 **Usage Tracking**: Monitor API calls and audio processing
+- 🚫 **Key Deactivation**: Instantly revoke access
+- 🔄 **Backward Compatibility**: Legacy API keys continue working
+
+# Authentication
+
 API_KEY=your-secure-api-key-here
 
 # AI Service API Keys (Obtain from respective platforms)

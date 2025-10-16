@@ -1,4 +1,5 @@
 """Flask application factory following Flask best practices."""
+import os
 from flask import Flask
 from flask_cors import CORS
 import logging
@@ -30,11 +31,27 @@ def create_app(config_override: Optional[dict] = None) -> Flask:
     # Store config in app for easy access
     app.config['APP_CONFIG'] = config
     
+    # Database configuration
+    database_url = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/mydb')
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    
+    # JWT Configuration
+    app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-jwt-secret-key-change-in-production')
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False  # Tokens don't expire by default
+    app.config['JWT_ALGORITHM'] = 'HS256'
+    
+    # Secret key for sessions
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-in-production')
+    
     # Configure CORS
     CORS(app, origins=["http://localhost:3000", "http://127.0.0.1:3000"])
     
     # Setup logging
     configure_logging()
+    
+    # Initialize database
+    init_database(app)
     
     # Register blueprints
     register_blueprints(app)
@@ -43,6 +60,24 @@ def create_app(config_override: Optional[dict] = None) -> Flask:
     register_error_handlers(app)
     
     return app
+
+def init_database(app: Flask) -> None:
+    """Initialize database extensions and create tables."""
+    try:
+        from models import init_db
+        init_db(app)
+        
+        # Create tables if they don't exist
+        with app.app_context():
+            from models import db
+            db.create_all()
+            
+        logging.info("Database initialized successfully")
+    except Exception as e:
+        logging.error(f"Database initialization failed: {str(e)}")
+        # In development, continue without database
+        if app.debug:
+            logging.warning("Continuing without database in debug mode")
 
 
 def register_blueprints(app: Flask) -> None:
@@ -53,6 +88,7 @@ def register_blueprints(app: Flask) -> None:
     from flask_app.api.translation import bp as translation_bp
     from flask_app.api.postprocessing import bp as postprocessing_bp
     from flask_app.api.utilities import bp as utilities_bp
+    from api.auth import bp as auth_bp  # New authentication endpoints
     
     # Register blueprints with appropriate URL prefixes
     app.register_blueprint(health_bp)
@@ -60,6 +96,7 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(translation_bp, url_prefix='/translations')
     app.register_blueprint(postprocessing_bp)
     app.register_blueprint(utilities_bp, url_prefix='/utilities')
+    app.register_blueprint(auth_bp, url_prefix='/auth')  # Auth endpoints
 
 
 def register_error_handlers(app: Flask) -> None:

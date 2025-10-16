@@ -19,8 +19,224 @@ servers:
 
 security:
   - ApiKeyAuth: []
+  - BearerAuth: []
 
 paths:
+  /auth/register:
+    post:
+      summary: Register new user
+      description: Create a new user account with email and password
+      tags:
+        - Authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: User email address
+                  example: "user@example.com"
+                password:
+                  type: string
+                  format: password
+                  description: User password (minimum 6 characters)
+                  example: "password123"
+                first_name:
+                  type: string
+                  description: User first name
+                  example: "John"
+                last_name:
+                  type: string
+                  description: User last name
+                  example: "Doe"
+                company:
+                  type: string
+                  description: User company name
+                  example: "Acme Corp"
+                plan:
+                  type: string
+                  enum: [free, pro, enterprise]
+                  default: free
+                  description: User subscription plan
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Bad request (email already exists, missing fields, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/login:
+    post:
+      summary: User login
+      description: Authenticate user with email and password to receive JWT token
+      tags:
+        - Authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: User email address
+                  example: "user@example.com"
+                password:
+                  type: string
+                  format: password
+                  description: User password
+                  example: "password123"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Login successful"
+                  access_token:
+                    type: string
+                    description: JWT access token
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/profile:
+    get:
+      summary: Get user profile
+      description: Get current user profile information and API keys
+      tags:
+        - Authentication
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+                  api_keys:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApiKey'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/api-keys:
+    post:
+      summary: Create new API key
+      description: Generate a new API key for the current user
+      tags:
+        - Authentication
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Name/description for the API key
+                  example: "Production Integration"
+      responses:
+        '201':
+          description: API key created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "API key created successfully"
+                  api_key:
+                    type: string
+                    description: The generated API key (shown only once)
+                    example: "usr_123_AbCdEf123456..."
+                  name:
+                    type: string
+                    example: "Production Integration"
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/api-keys/{keyId}:
+    delete:
+      summary: Deactivate API key
+      description: Deactivate a specific API key belonging to the current user
+      tags:
+        - Authentication
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: keyId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: API key ID to deactivate
+          example: 123
+      responses:
+        '200':
+          description: API key deactivated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "API key deactivated"
+        '404':
+          description: API key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /:
     get:
       summary: Root endpoint
@@ -957,9 +1173,129 @@ components:
       type: apiKey
       in: header
       name: x-api-key
-      description: API key required for all endpoints except health check
+      description: API key required for all endpoints except health check and authentication
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token for user authentication
 
   schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: User ID
+          example: 123
+        email:
+          type: string
+          format: email
+          description: User email address
+          example: "user@example.com"
+        first_name:
+          type: string
+          description: User first name
+          example: "John"
+        last_name:
+          type: string
+          description: User last name
+          example: "Doe"
+        company:
+          type: string
+          description: User company name
+          example: "Acme Corp"
+        plan:
+          type: string
+          enum: [free, pro, enterprise, legacy]
+          description: User subscription plan
+          example: "pro"
+        is_active:
+          type: boolean
+          description: Whether the user account is active
+          example: true
+        email_verified:
+          type: boolean
+          description: Whether the user email is verified
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          description: User registration timestamp
+          example: "2023-10-16T19:35:02.584833"
+        last_login:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last login timestamp
+          example: "2023-10-16T19:36:22.951768"
+        api_calls_month:
+          type: integer
+          description: Number of API calls made this month
+          example: 150
+        audio_minutes_month:
+          type: number
+          format: float
+          description: Minutes of audio processed this month
+          example: 45.5
+
+    ApiKey:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: API key ID
+          example: 456
+        name:
+          type: string
+          description: API key name/description
+          example: "Production Integration"
+        key_preview:
+          type: string
+          description: Partial API key for display (security)
+          example: "usr_123_****"
+        is_active:
+          type: boolean
+          description: Whether the API key is active
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          description: API key creation timestamp
+          example: "2023-10-16T19:35:02.584833"
+        last_used:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last usage timestamp
+          example: "2023-10-16T19:36:22.951768"
+        usage_count:
+          type: integer
+          description: Number of times this key has been used
+          example: 87
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: API key expiration timestamp (if any)
+          example: null
+
+    AuthResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "User registered successfully"
+        access_token:
+          type: string
+          description: JWT access token
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        api_key:
+          type: string
+          description: Generated API key (shown only once)
+          example: "usr_123_AbCdEf123456789..."
+        user:
+          $ref: '#/components/schemas/User'
     TranscriptionResponse:
       type: object
       properties:

@@ -1,22 +1,117 @@
-"""Authentication helpers."""
-from __future__ import annotations
+"""Authentication system with JWT and API Key support."""
 
 from functools import wraps
-from typing import Callable, TypeVar, cast
+from flask import request, jsonify, g, current_app
+import logging
 
-from flask import jsonify, request
+logger = logging.getLogger(__name__)
 
-from utils.config import get_app_config
+def require_auth(allow_api_key=True, allow_jwt=True):
+    """
+    Flexible authentication decorator that supports both JWT and API Key authentication.
+    
+    Args:
+        allow_api_key: Allow API key authentication (includes legacy support)
+        allow_jwt: Allow JWT authentication
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            user = None
+            auth_method = None
+            
+            # Try JWT first (Bearer token)
+            if allow_jwt:
+                auth_header = request.headers.get('Authorization', '')
+                if auth_header.startswith('Bearer '):
+                    try:
+                        from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+                        from models.user import User
+                        
+                        verify_jwt_in_request()
+                        user_id = get_jwt_identity()
+                        user = User.query.get(user_id)
+                        if user and user.is_active:
+                            auth_method = 'jwt'
+                            logger.info(f"JWT auth successful for user {user.id}")
+                    except Exception as e:
+                        logger.warning(f"JWT verification failed: {str(e)}")
+            
+            # Try API Key if JWT failed
+            if not user and allow_api_key:
+                api_key = request.headers.get('x-api-key')
+                if api_key:
+                    # Try new user API keys first
+                    from models.user import ApiKey
+                    user = ApiKey.verify_key(api_key)
+                    if user:
+                        auth_method = 'api_key'
+                        logger.info(f"API key auth successful for user {user.id}")
+                    else:
+                        # Legacy fallback (static API key)
+                        from utils.config import get_app_config
+                        if api_key == get_app_config().api_key:
+                            # Create temporary "system" user for legacy support
+                            user = type('LegacyUser', (), {
+                                'id': 0,
+                                'email': 'system@legacy.com',
+                                'plan': 'legacy',
+                                'is_active': True,
+                                'api_calls_month': 0,
+                                'audio_minutes_month': 0.0
+                            })()
+                            auth_method = 'legacy'
+                            logger.info("Legacy API key authentication")
+                        else:
+                            logger.warning(f"Invalid API key attempted")
+            
+            if not user:
+                return jsonify({'error': 'Authentication required'}), 401
+            
+            # Set user context for the request
+            g.current_user = user
+            g.auth_method = auth_method
+            
+            return f(*args, **kwargs)
+        
+        return decorated_function
+    return decorator
 
-F = TypeVar("F", bound=Callable[..., object])
+# Legacy decorator for backward compatibility
+def require_api_key(f):
+    """Legacy API key decorator - now supports both old and new API keys."""
+    return require_auth(allow_api_key=True, allow_jwt=False)(f)
 
+def require_jwt(f):
+    """Require JWT authentication only."""
+    return require_auth(allow_api_key=False, allow_jwt=True)(f)
 
-def require_api_key(func: F) -> F:
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        api_key = request.headers.get("x-api-key")
-        if api_key != get_app_config().api_key:
-            return jsonify({"error": "Invalid or missing API key"}), 401
-        return func(*args, **kwargs)
+def require_any_auth(f):
+    """Allow both JWT and API key authentication."""
+    return require_auth(allow_api_key=True, allow_jwt=True)(f)
 
-    return cast(F, wrapper)
+def log_usage(service, endpoint, **kwargs):
+    """Log API usage for billing purposes."""
+    try:
+        from models.user import UsageLog
+        from models import db
+        
+        if hasattr(g, 'current_user') and g.current_user.id != 0:  # Skip legacy user
+            usage_log = UsageLog(
+                user_id=g.current_user.id,
+                service=service,
+                endpoint=endpoint,
+                audio_duration_seconds=kwargs.get('audio_duration'),
+                tokens_used=kwargs.get('tokens_used'),
+                characters_processed=kwargs.get('characters_processed'),
+                cost_usd=kwargs.get('cost_usd'),
+                ip_address=request.remote_addr,
+                user_agent=request.headers.get('User-Agent', '')
+            )
+            
+            db.session.add(usage_log)
+            db.session.commit()
+            
+            logger.info(f"Usage logged for user {g.current_user.id}: {service}/{endpoint}")
+    except Exception as e:
+        logger.error(f"Failed to log usage: {str(e)}")

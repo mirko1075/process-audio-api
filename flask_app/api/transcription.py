@@ -1,10 +1,10 @@
 """Transcription API blueprint - Flask best practices style."""
 import logging
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, g
 from werkzeug.exceptions import BadRequest
 
 from flask_app.services.transcription import DeepgramService, WhisperService, AssemblyAIService
-from utils.auth import require_api_key
+from utils.auth import require_any_auth, log_usage
 from utils.exceptions import TranscriptionError
 
 
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 @bp.route('/deepgram', methods=['POST'])
-@require_api_key
+@require_any_auth
 def deepgram_transcription():
     """Transcribe audio using Deepgram Nova-2 model with enhanced options.
     
@@ -25,7 +25,7 @@ def deepgram_transcription():
     - punctuate: Enable smart punctuation (optional, default: 'true')
     - paragraphs: Enable paragraph detection (optional, default: 'false')
     """
-    logger.info("Deepgram transcription request received")
+    logger.info(f"Deepgram transcription request from user {g.current_user.id} via {g.auth_method}")
     
     # Validate audio file
     if 'audio' not in request.files:
@@ -80,7 +80,7 @@ def deepgram_transcription():
 
 
 @bp.route('/whisper', methods=['POST'])
-@require_api_key
+@require_any_auth
 def whisper_transcription():
     """Transcribe audio using OpenAI Whisper with automatic chunking.
     
@@ -127,7 +127,7 @@ def whisper_transcription():
 
 
 @bp.route('/assemblyai', methods=['POST'])
-@require_api_key
+@require_any_auth
 def assemblyai_transcription():
     """Transcribe audio using AssemblyAI.
     
@@ -177,7 +177,7 @@ def file_too_large(error):
 
 
 @bp.route('/transcribe-and-translate', methods=['POST'])
-@require_api_key
+@require_any_auth
 def transcribe_and_translate():
     """Combined transcription and translation endpoint.
     
@@ -263,7 +263,7 @@ def transcribe_and_translate():
 
 
 @bp.route('/video', methods=['POST'])
-@require_api_key
+@require_any_auth
 def video_transcription():
     """Transcribe video from URL or uploaded file using Whisper.
     
