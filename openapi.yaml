@@ -61,8 +61,8 @@ paths:
 
   /transcriptions/deepgram:
     post:
-      summary: Transcribe audio using Deepgram Nova-2
-      description: Upload an audio file to transcribe using Deepgram's Nova-2 model
+      summary: Transcribe audio using Deepgram Nova-2 with speaker diarization
+      description: Upload an audio file to transcribe using Deepgram's Nova-2 model with optional speaker diarization and enhanced formatting
       tags:
         - Transcription
       requestBody:
@@ -85,15 +85,31 @@ paths:
                   example: "en"
                 model:
                   type: string
+                  default: "nova-2"
                   description: Deepgram model to use
                   example: "nova-2"
+                diarize:
+                  type: boolean
+                  default: false
+                  description: Enable speaker diarization to identify different speakers
+                  example: true
+                punctuate:
+                  type: boolean
+                  default: true
+                  description: Enable smart punctuation in transcription
+                  example: true
+                paragraphs:
+                  type: boolean
+                  default: false
+                  description: Enable paragraph detection for better text formatting
+                  example: false
       responses:
         '200':
-          description: Transcription successful
+          description: Transcription successful with optional speaker diarization
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TranscriptionResponse'
+                $ref: '#/components/schemas/DeepgramTranscriptionResponse'
         '400':
           description: Bad request - no audio file uploaded
           content:
@@ -983,6 +999,174 @@ components:
           example: 10
       required:
         - transcript
+
+    DeepgramTranscriptionResponse:
+      type: object
+      properties:
+        transcript:
+          type: string
+          description: Transcribed text from Deepgram
+          example: "Hello, this is a conversation between two speakers."
+        confidence:
+          type: number
+          format: float
+          description: Overall confidence score
+          example: 0.92
+        language:
+          type: string
+          description: Detected or specified language
+          example: "en"
+        model:
+          type: string
+          description: Deepgram model used
+          example: "nova-2"
+        service:
+          type: string
+          description: Service identifier
+          example: "deepgram"
+        word_count:
+          type: integer
+          description: Number of words in the transcript
+          example: 42
+        duration_seconds:
+          type: number
+          format: float
+          description: Duration of the audio in seconds
+          example: 25.4
+        processing_info:
+          type: object
+          properties:
+            service:
+              type: string
+              example: "deepgram"
+            model_used:
+              type: string
+              example: "nova-2"
+            language_requested:
+              type: string
+              example: "en"
+            diarization_enabled:
+              type: boolean
+              example: true
+            paragraphs_enabled:
+              type: boolean
+              example: false
+        diarization:
+          type: object
+          description: Speaker diarization data (only present when diarization is enabled)
+          properties:
+            speakers_detected:
+              type: integer
+              description: Number of unique speakers detected
+              example: 2
+            total_duration:
+              type: number
+              format: float
+              description: Total duration in seconds
+              example: 25.4
+            speakers:
+              type: array
+              description: Statistics for each speaker
+              items:
+                type: object
+                properties:
+                  speaker_id:
+                    type: string
+                    description: Unique speaker identifier
+                    example: "Speaker_0"
+                  total_words:
+                    type: integer
+                    description: Total words spoken by this speaker
+                    example: 25
+                  total_duration:
+                    type: number
+                    format: float
+                    description: Total speaking time in seconds
+                    example: 12.5
+                  average_confidence:
+                    type: number
+                    format: float
+                    description: Average confidence for this speaker
+                    example: 0.91
+                  speaking_percentage:
+                    type: number
+                    format: float
+                    description: Percentage of total speaking time
+                    example: 49.2
+            segments:
+              type: array
+              description: Speaker segments with timestamps
+              items:
+                type: object
+                properties:
+                  speaker:
+                    type: string
+                    description: Speaker identifier
+                    example: "Speaker_0"
+                  speaker_id:
+                    type: integer
+                    description: Numeric speaker ID
+                    example: 0
+                  text:
+                    type: string
+                    description: Text spoken by this speaker in this segment
+                    example: "Hello, how are you today?"
+                  start_time:
+                    type: number
+                    format: float
+                    description: Start time in seconds
+                    example: 0.5
+                  end_time:
+                    type: number
+                    format: float
+                    description: End time in seconds
+                    example: 3.2
+                  duration:
+                    type: number
+                    format: float
+                    description: Duration of this segment in seconds
+                    example: 2.7
+                  word_count:
+                    type: integer
+                    description: Number of words in this segment
+                    example: 5
+        paragraphs:
+          type: array
+          description: Paragraph data (only present when paragraphs are enabled)
+          items:
+            type: object
+            properties:
+              paragraph_id:
+                type: integer
+                description: Sequential paragraph number
+                example: 1
+              text:
+                type: string
+                description: Paragraph text
+                example: "This is the first paragraph of the transcription."
+              start_time:
+                type: number
+                format: float
+                description: Paragraph start time in seconds
+                example: 0.0
+              end_time:
+                type: number
+                format: float
+                description: Paragraph end time in seconds
+                example: 5.2
+              duration:
+                type: number
+                format: float
+                description: Paragraph duration in seconds
+                example: 5.2
+              word_count:
+                type: integer
+                description: Number of words in the paragraph
+                example: 8
+      required:
+        - transcript
+        - confidence
+        - service
 
       TranslationResponse:
         type: object

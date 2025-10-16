@@ -15,12 +15,15 @@ logger = logging.getLogger(__name__)
 @bp.route('/deepgram', methods=['POST'])
 @require_api_key
 def deepgram_transcription():
-    """Transcribe audio using Deepgram Nova-2 model.
+    """Transcribe audio using Deepgram Nova-2 model with enhanced options.
     
     Accepts multipart/form-data with:
-    - audio: Audio file
+    - audio: Audio file (required)
     - language: Language code (optional, default: 'en')
     - model: Deepgram model (optional, default: 'nova-2')
+    - diarize: Enable speaker diarization (optional, default: 'false')
+    - punctuate: Enable smart punctuation (optional, default: 'true')
+    - paragraphs: Enable paragraph detection (optional, default: 'false')
     """
     logger.info("Deepgram transcription request received")
     
@@ -35,16 +38,38 @@ def deepgram_transcription():
     # Get optional parameters
     language = request.form.get('language', 'en')
     model = request.form.get('model', 'nova-2')
+    diarize = request.form.get('diarize', 'false').lower() == 'true'
+    punctuate = request.form.get('punctuate', 'true').lower() == 'true'
+    paragraphs = request.form.get('paragraphs', 'false').lower() == 'true'
     
-    logger.info(f"Processing Deepgram transcription: language={language}, model={model}")
+    logger.info(f"Processing Deepgram transcription: language={language}, model={model}, diarize={diarize}")
     
     try:
-        # Use service to handle transcription
+        # Use service to handle transcription with enhanced options
         service = DeepgramService()
-        result = service.transcribe(audio_file, language=language, model=model)
+        result = service.transcribe(
+            audio_file, 
+            language=language, 
+            model=model,
+            diarize=diarize,
+            punctuate=punctuate,
+            paragraphs=paragraphs
+        )
         
-        logger.info("Deepgram transcription completed successfully")
-        return jsonify(result)
+        # Add processing metadata
+        processing_info = {
+            "service": "deepgram",
+            "model_used": model,
+            "language_requested": language,
+            "diarization_enabled": diarize,
+            "paragraphs_enabled": paragraphs
+        }
+        
+        # Merge processing info with result
+        final_result = {**result, "processing_info": processing_info}
+        
+        logger.info(f"Deepgram transcription completed successfully (speakers: {result.get('diarization', {}).get('speakers_detected', 'N/A')})")
+        return jsonify(final_result)
         
     except TranscriptionError as e:
         logger.error(f"Deepgram transcription error: {e}")
