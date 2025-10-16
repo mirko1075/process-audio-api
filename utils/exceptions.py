@@ -11,3 +11,11 @@ class TranscriptionError(ServiceError):
 
 class TranslationError(ServiceError):
     """Raised when translation fails."""
+
+
+class InvalidRequestError(ServiceError):
+    """Raised when request validation fails."""
+
+
+class ProcessingError(ServiceError):
+    """Raised when video/audio processing fails."""

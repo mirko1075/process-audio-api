@@ -400,6 +400,172 @@
             "description": "Transcribe an audio file and optionally translate the result in one call"
           },
           "response": []
+        },
+        {
+          "name": "Video Transcription (URL)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"video_url\": \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\",\n  \"model_size\": \"tiny\",\n  \"auto_detect_language\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transcriptions/video",
+              "host": ["{{baseUrl}}"],
+              "path": ["transcriptions", "video"]
+            },
+            "description": "Transcribe video from URL (YouTube, etc.) using OpenAI Whisper"
+          },
+          "response": [
+            {
+              "name": "Video Transcription Successful",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{apiKey}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"video_url\": \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\",\n  \"model_size\": \"tiny\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/transcriptions/video",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["transcriptions", "video"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"transcript\": \"We're no strangers to love. You know the rules and so do I...\",\n  \"confidence\": 0.92,\n  \"language\": \"en\",\n  \"duration\": 213.0,\n  \"processing_time\": 27.1,\n  \"segments\": [\n    {\n      \"start\": 0.0,\n      \"end\": 3.2,\n      \"text\": \"We're no strangers to love\",\n      \"confidence\": 0.95\n    }\n  ],\n  \"metadata\": {\n    \"title\": \"Rick Astley - Never Gonna Give You Up\",\n    \"uploader\": \"Rick Astley\",\n    \"duration\": 213\n  },\n  \"model_used\": \"tiny\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Video Transcription (File Upload)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{apiKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "video",
+                  "type": "file",
+                  "src": "",
+                  "description": "Video file to transcribe (MP4, MOV, AVI, etc.)"
+                },
+                {
+                  "key": "model_size",
+                  "value": "small",
+                  "type": "text",
+                  "description": "Whisper model size: tiny, base, small, medium, large"
+                },
+                {
+                  "key": "auto_detect_language",
+                  "value": "true",
+                  "type": "text",
+                  "description": "Auto-detect language (true/false)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transcriptions/video",
+              "host": ["{{baseUrl}}"],
+              "path": ["transcriptions", "video"]
+            },
+            "description": "Upload and transcribe video file using OpenAI Whisper"
+          },
+          "response": [
+            {
+              "name": "File Upload Transcription Successful",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{apiKey}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "video",
+                      "type": "file",
+                      "src": "/path/to/video.mp4"
+                    },
+                    {
+                      "key": "model_size",
+                      "value": "small",
+                      "type": "text"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/transcriptions/video",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["transcriptions", "video"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"transcript\": \"This is the transcribed content from the uploaded video file...\",\n  \"confidence\": 0.88,\n  \"language\": \"en\",\n  \"duration\": 120.5,\n  \"processing_time\": 15.3,\n  \"segments\": [\n    {\n      \"start\": 0.0,\n      \"end\": 5.0,\n      \"text\": \"This is the transcribed content\",\n      \"confidence\": 0.90\n    }\n  ],\n  \"metadata\": {\n    \"filename\": \"video.mp4\",\n    \"filesize\": 15728640\n  },\n  \"model_used\": \"small\"\n}"
+            }
+          ]
         }
       ]
     },

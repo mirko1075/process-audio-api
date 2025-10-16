@@ -237,6 +237,68 @@ def transcribe_and_translate():
         return jsonify({'error': 'Internal server error'}), 500
 
 
+@bp.route('/video', methods=['POST'])
+@require_api_key
+def video_transcription():
+    """Transcribe video from URL or uploaded file using Whisper.
+    
+    Accepts either:
+    1. JSON with video_url for processing YouTube/web videos
+    2. multipart/form-data with video file upload
+    
+    Optional parameters:
+    - language: Language code (optional, auto-detect if not provided)
+    - model_size: Whisper model size (tiny, base, small, medium, large, default: base)
+    """
+    logger.info("Video transcription request received")
+    
+    try:
+        from flask_app.services.video_transcription import VideoTranscriptionService
+        service = VideoTranscriptionService()
+        
+        # Check if request contains video URL or file upload
+        if request.content_type and 'application/json' in request.content_type:
+            # Process video URL
+            data = request.get_json()
+            if not data or 'video_url' not in data:
+                raise BadRequest('video_url is required for JSON requests')
+            
+            video_url = data['video_url']
+            language = data.get('language')  # None for auto-detect
+            model_size = data.get('model_size', 'base')
+            
+            logger.info(f"Processing video URL: {video_url}, language={language}, model={model_size}")
+            result = service.transcribe_from_url(video_url, language=language, model_size=model_size)
+            
+        elif 'video' in request.files:
+            # Process uploaded video file
+            video_file = request.files['video']
+            if video_file.filename == '':
+                raise BadRequest('No video file selected')
+            
+            language = request.form.get('language')  # None for auto-detect
+            model_size = request.form.get('model_size', 'base')
+            
+            logger.info(f"Processing uploaded video: {video_file.filename}, language={language}, model={model_size}")
+            result = service.transcribe_from_file(video_file, language=language, model_size=model_size)
+            
+        else:
+            raise BadRequest('Either video_url (JSON) or video file (multipart) is required')
+        
+        logger.info("Video transcription completed successfully")
+        return jsonify(result)
+        
+    except BadRequest as e:
+        logger.error(f"Bad request in video transcription: {e.description}")
+        return jsonify({'error': e.description}), 400
+    except TranscriptionError as e:
+        logger.error(f"Video transcription error: {e}")
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"Unexpected error in video transcription: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+
 @bp.errorhandler(BadRequest)
 def handle_bad_request(error):
     """Handle bad request errors."""

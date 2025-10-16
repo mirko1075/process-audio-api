@@ -84,6 +84,7 @@ app.py                        # Main application entry point
 | `POST` | `/transcriptions/deepgram` | Deepgram Nova-2 transcription with speaker diarization |
 | `POST` | `/transcriptions/whisper` | OpenAI Whisper transcription (auto-chunking for large files) |
 | `POST` | `/transcriptions/assemblyai` | AssemblyAI transcription with language detection |
+| `POST` | `/transcriptions/video` | **Video transcription** from URL (YouTube, etc.) or uploaded files with auto language detection |
 | `POST` | `/transcriptions/transcribe-and-translate` | **Combined** transcription + translation in one call |
 
 ### **🌐 Translation Services**
@@ -326,6 +327,51 @@ pytest --cov=flask_app tests/
 - **Translation**: All major languages via OpenAI/Google/DeepSeek
 - **Specialized**: Medical terminology optimization for Asian languages
 - **Speaker Diarization**: Multi-speaker conversation support
+
+## 🎥 Video Transcription
+
+The `/transcriptions/video` endpoint supports video transcription from multiple sources with automatic language detection:
+
+### **Supported Video Sources**
+- **YouTube URLs**: Automatic download and transcription
+- **Direct Video URLs**: Any publicly accessible video URL
+- **File Uploads**: MP4, AVI, MOV, MKV, and other common formats
+
+### **Features**
+- **Auto Language Detection**: Whisper automatically detects the spoken language
+- **Multiple Model Sizes**: Choose from tiny, base, small, medium, large based on accuracy vs. speed needs
+- **Video Metadata**: Extracts title, duration, uploader info for URL sources
+- **Segment Timestamps**: Provides word-level timing information
+- **Large File Support**: Handles long videos with automatic audio extraction
+
+### **Usage Examples**
+
+**YouTube Video Transcription:**
+```bash
+curl -X POST https://your-api.com/transcriptions/video \
+  -H "x-api-key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "video_url": "https://www.youtube.com/watch?v=example",
+    "language": "en",
+    "model_size": "base"
+  }'
+```
+
+**File Upload Transcription:**
+```bash
+curl -X POST https://your-api.com/transcriptions/video \
+  -H "x-api-key: your-api-key" \
+  -F "video=@your-video.mp4" \
+  -F "model_size=small"
+```
+
+### **Model Size Guide**
+- **tiny**: Fastest, least accurate (39 MB)
+- **base**: Good balance (74 MB) - **Recommended**
+- **small**: More accurate (244 MB)
+- **medium**: High accuracy (769 MB)
+- **large**: Maximum accuracy (1550 MB)
 
 ## 🔧 Troubleshooting
 

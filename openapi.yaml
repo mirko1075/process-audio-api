@@ -281,6 +281,153 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /transcriptions/video:
+    post:
+      summary: Transcribe video from URL or uploaded file
+      description: |
+        Transcribe video content using Whisper with automatic language detection.
+        Supports YouTube URLs, direct video URLs, and uploaded video files.
+      tags:
+        - Transcription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - video_url
+              properties:
+                video_url:
+                  type: string
+                  format: uri
+                  description: URL of the video to transcribe (YouTube, etc.)
+                  example: "https://www.youtube.com/watch?v=example"
+                language:
+                  type: string
+                  nullable: true
+                  description: Language code for transcription (null for auto-detect)
+                  example: "en"
+                model_size:
+                  type: string
+                  enum: [tiny, base, small, medium, large]
+                  default: base
+                  description: Whisper model size (accuracy vs speed trade-off)
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - video
+              properties:
+                video:
+                  type: string
+                  format: binary
+                  description: Video file to transcribe
+                language:
+                  type: string
+                  description: Language code for transcription (auto-detect if not provided)
+                  example: "en"
+                model_size:
+                  type: string
+                  enum: [tiny, base, small, medium, large]
+                  default: base
+                  description: Whisper model size
+      responses:
+        '200':
+          description: Video transcription successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transcript:
+                    type: string
+                    description: Complete transcription text
+                  confidence:
+                    type: number
+                    format: float
+                    description: Average confidence score (0.0-1.0)
+                  detected_language:
+                    type: string
+                    description: Auto-detected or specified language
+                  model:
+                    type: string
+                    description: Whisper model used
+                    example: "whisper-base"
+                  service:
+                    type: string
+                    example: "whisper-video"
+                  source:
+                    type: string
+                    enum: [video_url, video_file]
+                    description: Source type of the video
+                  word_count:
+                    type: integer
+                    description: Number of words in transcript
+                  transcription_time:
+                    type: number
+                    format: float
+                    description: Time taken for transcription in seconds
+                  formatted_transcript_array:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        text:
+                          type: string
+                    description: Array of formatted transcript segments
+                  video_title:
+                    type: string
+                    nullable: true
+                    description: Video title (for URL sources)
+                  video_duration:
+                    type: number
+                    format: float
+                    description: Video duration in seconds
+                  video_uploader:
+                    type: string
+                    nullable: true
+                    description: Video uploader (for URL sources)
+                  filename:
+                    type: string
+                    nullable: true
+                    description: Original filename (for file uploads)
+                  file_size:
+                    type: integer
+                    nullable: true
+                    description: File size in bytes (for file uploads)
+                  segments:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        start:
+                          type: number
+                          format: float
+                        end:
+                          type: number
+                          format: float
+                        text:
+                          type: string
+                        confidence:
+                          type: number
+                          format: float
+                    description: Detailed transcript segments with timestamps
+        '400':
+          description: Bad request - invalid video URL or file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          description: Video processing failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /translations/openai:
     post:
       summary: Translate text using OpenAI GPT
