@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PORT=5000
 
-# Install system dependencies for audio processing
+# Install system dependencies for audio and video processing
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     libsndfile1 \
@@ -14,6 +14,10 @@ RUN apt-get update && apt-get install -y \
     portaudio19-dev \
     libasound2-dev \
     libpulse-dev \
+    # Video processing dependencies
+    libavcodec-extra \
+    libavformat-dev \
+    libavdevice-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
