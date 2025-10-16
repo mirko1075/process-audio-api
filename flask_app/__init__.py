@@ -24,9 +24,10 @@ def create_app(config_override: Optional[dict] = None) -> Flask:
     config = get_app_config()
     
     # Apply any configuration overrides (useful for testing)
+    # Since config is frozen, we need to use app.config for Flask settings
     if config_override:
         for key, value in config_override.items():
-            setattr(config, key, value)
+            app.config[key] = value
     
     # Store config in app for easy access
     app.config['APP_CONFIG'] = config

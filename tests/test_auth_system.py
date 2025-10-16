@@ -6,6 +6,21 @@ from unittest.mock import patch, MagicMock
 
 # Test fixtures
 @pytest.fixture
+def client():
+    """Create a test client for the Flask app."""
+    from flask_app import create_app
+    
+    app = create_app({
+        'TESTING': True,
+        'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
+        'WTF_CSRF_ENABLED': False,
+        'JWT_SECRET_KEY': 'test-jwt-secret'
+    })
+    
+    with app.test_client() as client:
+        with app.app_context():
+            yield client
+@pytest.fixture
 def mock_db():
     """Mock database for testing."""
     with patch('models.db') as mock:
@@ -39,8 +54,8 @@ class TestUserRegistration:
     
     def test_register_success(self, client, mock_db, mock_user):
         """Test successful user registration."""
-        with patch('api.auth.User') as MockUser, \
-             patch('api.auth.create_access_token') as mock_jwt:
+        with patch('models.user.User') as MockUser, \
+             patch('flask_jwt_extended.create_access_token') as mock_jwt:
             
             # Setup mocks
             MockUser.query.filter_by.return_value.first.return_value = None
@@ -66,7 +81,7 @@ class TestUserRegistration:
     
     def test_register_existing_email(self, client, mock_user):
         """Test registration with existing email."""
-        with patch('api.auth.User') as MockUser:
+        with patch('models.user.User') as MockUser:
             MockUser.query.filter_by.return_value.first.return_value = mock_user
             
             response = client.post('/auth/register',
@@ -95,8 +110,8 @@ class TestUserLogin:
     
     def test_login_success(self, client, mock_user):
         """Test successful login."""
-        with patch('api.auth.User') as MockUser, \
-             patch('api.auth.create_access_token') as mock_jwt:
+        with patch('models.user.User') as MockUser, \
+             patch('flask_jwt_extended.create_access_token') as mock_jwt:
             
             MockUser.query.filter_by.return_value.first.return_value = mock_user
             mock_jwt.return_value = "test_jwt_token"
@@ -116,7 +131,7 @@ class TestUserLogin:
     
     def test_login_invalid_credentials(self, client):
         """Test login with invalid credentials."""
-        with patch('api.auth.User') as MockUser:
+        with patch('models.user.User') as MockUser:
             MockUser.query.filter_by.return_value.first.return_value = None
             
             response = client.post('/auth/login',
@@ -134,7 +149,7 @@ class TestUserLogin:
         """Test login with inactive user."""
         mock_user.is_active = False
         
-        with patch('api.auth.User') as MockUser:
+        with patch('models.user.User') as MockUser:
             MockUser.query.filter_by.return_value.first.return_value = mock_user
             
             response = client.post('/auth/login',
@@ -153,7 +168,7 @@ class TestAPIKeyAuthentication:
     
     def test_api_key_auth_success(self, client, mock_user):
         """Test successful API key authentication."""
-        with patch('utils.auth.ApiKey') as MockApiKey:
+        with patch('models.user.ApiKey') as MockApiKey:
             MockApiKey.verify_key.return_value = mock_user
             
             response = client.post('/transcriptions/deepgram',
@@ -166,7 +181,7 @@ class TestAPIKeyAuthentication:
     
     def test_api_key_auth_invalid(self, client):
         """Test authentication with invalid API key."""
-        with patch('utils.auth.ApiKey') as MockApiKey:
+        with patch('models.user.ApiKey') as MockApiKey:
             MockApiKey.verify_key.return_value = None
             
             response = client.post('/transcriptions/deepgram',
@@ -180,8 +195,10 @@ class TestAPIKeyAuthentication:
     
     def test_legacy_api_key_auth(self, client):
         """Test legacy API key authentication."""
-        with patch('utils.config.get_app_config') as mock_config:
+        with patch('utils.config.get_app_config') as mock_config, \
+             patch('models.user.ApiKey') as MockApiKey:
             mock_config.return_value.api_key = 'legacy_api_key'
+            MockApiKey.verify_key.return_value = None  # No user API key found
             
             response = client.post('/transcriptions/deepgram',
                 headers={'x-api-key': 'legacy_api_key'},
@@ -196,9 +213,9 @@ class TestJWTAuthentication:
     
     def test_jwt_auth_success(self, client, mock_user):
         """Test successful JWT authentication."""
-        with patch('utils.auth.verify_jwt_in_request') as mock_verify, \
-             patch('utils.auth.get_jwt_identity') as mock_identity, \
-             patch('utils.auth.User') as MockUser:
+        with patch('flask_jwt_extended.verify_jwt_in_request') as mock_verify, \
+             patch('flask_jwt_extended.get_jwt_identity') as mock_identity, \
+             patch('models.user.User') as MockUser:
             
             mock_identity.return_value = 1
             MockUser.query.get.return_value = mock_user
@@ -213,7 +230,7 @@ class TestJWTAuthentication:
     
     def test_jwt_auth_invalid(self, client):
         """Test authentication with invalid JWT."""
-        with patch('utils.auth.verify_jwt_in_request') as mock_verify:
+        with patch('flask_jwt_extended.verify_jwt_in_request') as mock_verify:
             mock_verify.side_effect = Exception("Invalid token")
             
             response = client.post('/transcriptions/deepgram',
@@ -230,9 +247,9 @@ class TestAPIKeyManagement:
     
     def test_create_api_key(self, client, mock_user):
         """Test creating new API key."""
-        with patch('api.auth.verify_jwt_in_request'), \
-             patch('api.auth.get_jwt_identity') as mock_identity, \
-             patch('api.auth.User') as MockUser:
+        with patch('flask_jwt_extended.verify_jwt_in_request'), \
+             patch('flask_jwt_extended.get_jwt_identity') as mock_identity, \
+             patch('models.user.User') as MockUser:
             
             mock_identity.return_value = 1
             MockUser.query.get.return_value = mock_user
@@ -250,9 +267,9 @@ class TestAPIKeyManagement:
     
     def test_delete_api_key(self, client, mock_api_key):
         """Test deactivating API key."""
-        with patch('api.auth.verify_jwt_in_request'), \
-             patch('api.auth.get_jwt_identity') as mock_identity, \
-             patch('api.auth.ApiKey') as MockApiKey:
+        with patch('flask_jwt_extended.verify_jwt_in_request'), \
+             patch('flask_jwt_extended.get_jwt_identity') as mock_identity, \
+             patch('models.user.ApiKey') as MockApiKey:
             
             mock_identity.return_value = 1
             MockApiKey.query.filter_by.return_value.first.return_value = mock_api_key
@@ -271,8 +288,10 @@ class TestBackwardCompatibility:
     
     def test_existing_endpoints_work(self, client):
         """Test that existing endpoints still work with legacy auth."""
-        with patch('utils.config.get_app_config') as mock_config:
+        with patch('utils.config.get_app_config') as mock_config, \
+             patch('models.user.ApiKey') as MockApiKey:
             mock_config.return_value.api_key = 'legacy_key'
+            MockApiKey.verify_key.return_value = None  # No user API key found
             
             # Test all transcription endpoints
             endpoints = [
