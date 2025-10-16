@@ -48,32 +48,39 @@ class DeepgramService(TranscriptionService):
         logger.info("Deepgram transcription service initialized")
     
     def transcribe(self, audio_file: FileStorage, language: str = 'en', 
-                  model: str = 'nova-2') -> Dict[str, Any]:
-        """Transcribe audio file using Deepgram Nova-2.
+                  model: str = 'nova-2', diarize: bool = False, 
+                  punctuate: bool = True, paragraphs: bool = False) -> Dict[str, Any]:
+        """Transcribe audio file using Deepgram Nova-2 with enhanced options.
         
         Args:
             audio_file: Uploaded audio file
             language: Language code (default: 'en')
             model: Deepgram model to use (default: 'nova-2')
+            diarize: Enable speaker diarization (default: False)
+            punctuate: Enable smart punctuation (default: True)
+            paragraphs: Enable paragraph detection (default: False)
             
         Returns:
-            Transcription result with metadata
+            Transcription result with metadata and optional diarization data
         """
-        logger.info(f"Starting Deepgram transcription (language: {language}, model: {model})")
+        logger.info(f"Starting Deepgram transcription (language: {language}, model: {model}, diarize: {diarize})")
         
         try:
             # Read file content
             file_bytes = audio_file.read()
             audio_file.seek(0)  # Reset file pointer for potential reuse
             
-            # Use client to transcribe
+            # Use client to transcribe with enhanced options
             result = self.client.transcribe(
                 audio_data=file_bytes,
                 language=language,
-                model=model
+                model=model,
+                diarize=diarize,
+                punctuate=punctuate,
+                paragraphs=paragraphs
             )
             
-            logger.info("Deepgram transcription completed successfully")
+            logger.info(f"Deepgram transcription completed successfully (speakers: {result.get('diarization', {}).get('speakers_detected', 'N/A')})")
             return result
             
         except Exception as exc:
