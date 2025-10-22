@@ -83,6 +83,14 @@ class TestVideoTranscriptionService:
                 model_size="tiny"
             )
 
+    def test_transcribe_from_url_invalid_url_validation(self):
+        """Test URL transcription with invalid URL gets caught by validation."""
+        with pytest.raises(TranscriptionError, match="Invalid or unsupported video URL"):
+            self.service.transcribe_from_url(
+                "https://example.com/not-a-video",
+                model_size="tiny"
+            )
+
 
 class TestVideoProcessor:
     """Test cases for VideoProcessor."""
@@ -101,17 +109,15 @@ class TestVideoProcessor:
     
     def test_validate_url_youtube(self):
         """Test URL validation for YouTube URLs."""
-        # Since _is_valid_url doesn't exist in the current implementation,
-        # we'll test that the processor can handle YouTube URLs without error
         valid_urls = [
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
             "https://youtu.be/dQw4w9WgXcQ",
             "https://m.youtube.com/watch?v=dQw4w9WgXcQ"
         ]
         
-        # Just verify we can create a processor and it recognizes YouTube URLs
+        # Test that valid YouTube URLs are recognized
         for url in valid_urls:
-            assert "youtube" in url or "youtu.be" in url
+            assert self.processor._is_valid_url(url), f"URL should be valid: {url}"
     
     def test_validate_url_invalid(self):
         """Test URL validation for invalid URLs."""
@@ -119,13 +125,15 @@ class TestVideoProcessor:
             "not_a_url",
             "http://",
             "ftp://example.com",
-            ""
+            "",
+            None,
+            "https://example.com/video.mp4",  # Non-YouTube URL
+            "http://vimeo.com/123456"  # Different platform
         ]
         
-        # Test that these are clearly not YouTube URLs
+        # Test that invalid URLs are rejected
         for url in invalid_urls:
-            if url:
-                assert "youtube" not in str(url) and "youtu.be" not in str(url)
+            assert not self.processor._is_valid_url(url), f"URL should be invalid: {url}"
     
     @patch('flask_app.clients.video_processor.yt_dlp.YoutubeDL')
     def test_download_video_success(self, mock_ytdl_class):
@@ -184,7 +192,7 @@ class TestVideoProcessor:
         }
         
         with tempfile.NamedTemporaryFile(suffix=".wav") as temp_audio:
-            result = self.processor._transcribe_audio_file(temp_audio.name, "tiny")
+            result = self.processor._transcribe_audio_file(temp_audio.name, language=None, model_size="tiny")
             
             assert result["transcript"] == "Test transcript"
             assert result["detected_language"] == "en"
