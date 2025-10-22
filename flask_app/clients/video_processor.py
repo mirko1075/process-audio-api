@@ -198,6 +198,22 @@ class VideoProcessor:
             logger.warning(f"Failed to get video metadata: {e}")
             return {}
     
+    def _download_video(self, video_url: str) -> tuple[str, Dict[str, Any]]:
+        """Download video and get metadata - compatibility wrapper.
+        
+        Args:
+            video_url: URL of the video
+            
+        Returns:
+            Tuple of (audio_path, metadata)
+        """
+        # Download audio
+        audio_path = self._download_audio_from_url(video_url)
+        
+        # Get metadata
+        metadata = self._get_video_metadata(video_url)
+        
+        return audio_path, metadata
     def _save_video_data(self, video_data: bytes, filename: str) -> str:
         """Save video data to temporary file.
         

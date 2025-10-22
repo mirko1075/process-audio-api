@@ -139,11 +139,14 @@ class TestVideoProcessor:
         }
         
         with patch('os.path.exists', return_value=True):
-            audio_path = self.processor._download_audio_from_url(
+            audio_path, metadata = self.processor._download_video(
                 "https://www.youtube.com/watch?v=test"
             )
             
             assert audio_path.endswith(".mp3")
+            assert isinstance(metadata, dict)
+            assert metadata.get("title") == "Test Video"
+            assert metadata.get("duration") == 120
             mock_ytdl.download.assert_called_once()
     
     def test_extract_audio_from_video(self):
