@@ -220,8 +220,8 @@ class DeepgramClient:
                     "language_confidence": channel.get('language_confidence')
                 })
 
-                return metadata
-            
+            return metadata
+        
         except Exception as exc:
             logger.warning(f"Could not extract metadata: {exc}")
         
