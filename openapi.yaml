@@ -19,8 +19,224 @@ servers:
 
 security:
   - ApiKeyAuth: []
+  - BearerAuth: []
 
 paths:
+  /auth/register:
+    post:
+      summary: Register new user
+      description: Create a new user account with email and password
+      tags:
+        - Authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: User email address
+                  example: "user@example.com"
+                password:
+                  type: string
+                  format: password
+                  description: User password (minimum 8 characters)
+                  example: "password123"
+                first_name:
+                  type: string
+                  description: User first name
+                  example: "John"
+                last_name:
+                  type: string
+                  description: User last name
+                  example: "Doe"
+                company:
+                  type: string
+                  description: User company name
+                  example: "Acme Corp"
+                plan:
+                  type: string
+                  enum: [free, pro, enterprise]
+                  default: free
+                  description: User subscription plan
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Bad request (email already exists, missing fields, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/login:
+    post:
+      summary: User login
+      description: Authenticate user with email and password to receive JWT token
+      tags:
+        - Authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: User email address
+                  example: "user@example.com"
+                password:
+                  type: string
+                  format: password
+                  description: User password
+                  example: "password123"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Login successful"
+                  access_token:
+                    type: string
+                    description: JWT access token
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/profile:
+    get:
+      summary: Get user profile
+      description: Get current user profile information and API keys
+      tags:
+        - Authentication
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+                  api_keys:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApiKey'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/api-keys:
+    post:
+      summary: Create new API key
+      description: Generate a new API key for the current user
+      tags:
+        - Authentication
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Name/description for the API key
+                  example: "Production Integration"
+      responses:
+        '201':
+          description: API key created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "API key created successfully"
+                  api_key:
+                    type: string
+                    description: The generated API key (shown only once)
+                    example: "usr_123_AbCdEf123456..."
+                  name:
+                    type: string
+                    example: "Production Integration"
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/api-keys/{keyId}:
+    delete:
+      summary: Deactivate API key
+      description: Deactivate a specific API key belonging to the current user
+      tags:
+        - Authentication
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: keyId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: API key ID to deactivate
+          example: 123
+      responses:
+        '200':
+          description: API key deactivated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "API key deactivated"
+        '404':
+          description: API key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /:
     get:
       summary: Root endpoint
@@ -61,8 +277,8 @@ paths:
 
   /transcriptions/deepgram:
     post:
-      summary: Transcribe audio using Deepgram Nova-2
-      description: Upload an audio file to transcribe using Deepgram's Nova-2 model
+      summary: Transcribe audio using Deepgram Nova-2 with speaker diarization
+      description: Upload an audio file to transcribe using Deepgram's Nova-2 model with optional speaker diarization and enhanced formatting
       tags:
         - Transcription
       requestBody:
@@ -85,15 +301,31 @@ paths:
                   example: "en"
                 model:
                   type: string
+                  default: "nova-2"
                   description: Deepgram model to use
                   example: "nova-2"
+                diarize:
+                  type: boolean
+                  default: false
+                  description: Enable speaker diarization to identify different speakers
+                  example: true
+                punctuate:
+                  type: boolean
+                  default: true
+                  description: Enable smart punctuation in transcription
+                  example: true
+                paragraphs:
+                  type: boolean
+                  default: false
+                  description: Enable paragraph detection for better text formatting
+                  example: false
       responses:
         '200':
-          description: Transcription successful
+          description: Transcription successful with optional speaker diarization
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TranscriptionResponse'
+                $ref: '#/components/schemas/DeepgramTranscriptionResponse'
         '400':
           description: Bad request - no audio file uploaded
           content:
@@ -941,9 +1173,129 @@ components:
       type: apiKey
       in: header
       name: x-api-key
-      description: API key required for all endpoints except health check
+      description: API key required for all endpoints except health check and authentication
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token for user authentication
 
   schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: User ID
+          example: 123
+        email:
+          type: string
+          format: email
+          description: User email address
+          example: "user@example.com"
+        first_name:
+          type: string
+          description: User first name
+          example: "John"
+        last_name:
+          type: string
+          description: User last name
+          example: "Doe"
+        company:
+          type: string
+          description: User company name
+          example: "Acme Corp"
+        plan:
+          type: string
+          enum: [free, pro, enterprise, legacy]
+          description: User subscription plan
+          example: "pro"
+        is_active:
+          type: boolean
+          description: Whether the user account is active
+          example: true
+        email_verified:
+          type: boolean
+          description: Whether the user email is verified
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          description: User registration timestamp
+          example: "2023-10-16T19:35:02.584833"
+        last_login:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last login timestamp
+          example: "2023-10-16T19:36:22.951768"
+        api_calls_month:
+          type: integer
+          description: Number of API calls made this month
+          example: 150
+        audio_minutes_month:
+          type: number
+          format: float
+          description: Minutes of audio processed this month
+          example: 45.5
+
+    ApiKey:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: API key ID
+          example: 456
+        name:
+          type: string
+          description: API key name/description
+          example: "Production Integration"
+        key_preview:
+          type: string
+          description: Partial API key for display (security)
+          example: "usr_123_****"
+        is_active:
+          type: boolean
+          description: Whether the API key is active
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          description: API key creation timestamp
+          example: "2023-10-16T19:35:02.584833"
+        last_used:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last usage timestamp
+          example: "2023-10-16T19:36:22.951768"
+        usage_count:
+          type: integer
+          description: Number of times this key has been used
+          example: 87
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: API key expiration timestamp (if any)
+          example: null
+
+    AuthResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "User registered successfully"
+        access_token:
+          type: string
+          description: JWT access token
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        api_key:
+          type: string
+          description: Generated API key (shown only once)
+          example: "usr_123_AbCdEf123456789..."
+        user:
+          $ref: '#/components/schemas/User'
     TranscriptionResponse:
       type: object
       properties:
@@ -983,6 +1335,174 @@ components:
           example: 10
       required:
         - transcript
+
+    DeepgramTranscriptionResponse:
+      type: object
+      properties:
+        transcript:
+          type: string
+          description: Transcribed text from Deepgram
+          example: "Hello, this is a conversation between two speakers."
+        confidence:
+          type: number
+          format: float
+          description: Overall confidence score
+          example: 0.92
+        language:
+          type: string
+          description: Detected or specified language
+          example: "en"
+        model:
+          type: string
+          description: Deepgram model used
+          example: "nova-2"
+        service:
+          type: string
+          description: Service identifier
+          example: "deepgram"
+        word_count:
+          type: integer
+          description: Number of words in the transcript
+          example: 42
+        duration_seconds:
+          type: number
+          format: float
+          description: Duration of the audio in seconds
+          example: 25.4
+        processing_info:
+          type: object
+          properties:
+            service:
+              type: string
+              example: "deepgram"
+            model_used:
+              type: string
+              example: "nova-2"
+            language_requested:
+              type: string
+              example: "en"
+            diarization_enabled:
+              type: boolean
+              example: true
+            paragraphs_enabled:
+              type: boolean
+              example: false
+        diarization:
+          type: object
+          description: Speaker diarization data (only present when diarization is enabled)
+          properties:
+            speakers_detected:
+              type: integer
+              description: Number of unique speakers detected
+              example: 2
+            total_duration:
+              type: number
+              format: float
+              description: Total duration in seconds
+              example: 25.4
+            speakers:
+              type: array
+              description: Statistics for each speaker
+              items:
+                type: object
+                properties:
+                  speaker_id:
+                    type: string
+                    description: Unique speaker identifier
+                    example: "Speaker_0"
+                  total_words:
+                    type: integer
+                    description: Total words spoken by this speaker
+                    example: 25
+                  total_duration:
+                    type: number
+                    format: float
+                    description: Total speaking time in seconds
+                    example: 12.5
+                  average_confidence:
+                    type: number
+                    format: float
+                    description: Average confidence for this speaker
+                    example: 0.91
+                  speaking_percentage:
+                    type: number
+                    format: float
+                    description: Percentage of total speaking time
+                    example: 49.2
+            segments:
+              type: array
+              description: Speaker segments with timestamps
+              items:
+                type: object
+                properties:
+                  speaker:
+                    type: string
+                    description: Speaker identifier
+                    example: "Speaker_0"
+                  speaker_id:
+                    type: integer
+                    description: Numeric speaker ID
+                    example: 0
+                  text:
+                    type: string
+                    description: Text spoken by this speaker in this segment
+                    example: "Hello, how are you today?"
+                  start_time:
+                    type: number
+                    format: float
+                    description: Start time in seconds
+                    example: 0.5
+                  end_time:
+                    type: number
+                    format: float
+                    description: End time in seconds
+                    example: 3.2
+                  duration:
+                    type: number
+                    format: float
+                    description: Duration of this segment in seconds
+                    example: 2.7
+                  word_count:
+                    type: integer
+                    description: Number of words in this segment
+                    example: 5
+        paragraphs:
+          type: array
+          description: Paragraph data (only present when paragraphs are enabled)
+          items:
+            type: object
+            properties:
+              paragraph_id:
+                type: integer
+                description: Sequential paragraph number
+                example: 1
+              text:
+                type: string
+                description: Paragraph text
+                example: "This is the first paragraph of the transcription."
+              start_time:
+                type: number
+                format: float
+                description: Paragraph start time in seconds
+                example: 0.0
+              end_time:
+                type: number
+                format: float
+                description: Paragraph end time in seconds
+                example: 5.2
+              duration:
+                type: number
+                format: float
+                description: Paragraph duration in seconds
+                example: 5.2
+              word_count:
+                type: integer
+                description: Number of words in the paragraph
+                example: 8
+      required:
+        - transcript
+        - confidence
+        - service
 
       TranslationResponse:
         type: object

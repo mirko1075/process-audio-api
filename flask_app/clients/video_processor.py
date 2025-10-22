@@ -44,6 +44,10 @@ class VideoProcessor:
         try:
             logger.info(f"Starting video URL processing: {video_url}")
             
+            # Validate URL before processing
+            if not self._is_valid_url(video_url):
+                raise TranscriptionError(f"Invalid or unsupported video URL: {video_url}")
+            
             # Download audio from video URL
             audio_file = self._download_audio_from_url(video_url)
             
@@ -128,6 +132,32 @@ class VideoProcessor:
                     except Exception as e:
                         logger.warning(f"Failed to cleanup file: {e}")
     
+    def _is_valid_url(self, url: str) -> bool:
+        """Validate if URL is supported for video processing.
+        
+        Args:
+            url: URL to validate
+            
+        Returns:
+            True if URL is valid and supported, False otherwise
+        """
+        if not url or not isinstance(url, str):
+            return False
+        
+        # Basic URL format check
+        if not url.startswith(('http://', 'https://')):
+            return False
+        
+        # Check for supported platforms (primarily YouTube)
+        supported_patterns = [
+            'youtube.com/watch',
+            'youtu.be/',
+            'm.youtube.com/watch',
+            'www.youtube.com/watch'
+        ]
+        
+        return any(pattern in url.lower() for pattern in supported_patterns)
+    
     def _download_audio_from_url(self, video_url: str) -> str:
         """Download audio from video URL using yt-dlp.
         
@@ -198,6 +228,22 @@ class VideoProcessor:
             logger.warning(f"Failed to get video metadata: {e}")
             return {}
     
+    def _download_video(self, video_url: str) -> tuple[str, Dict[str, Any]]:
+        """Download video and get metadata - compatibility wrapper.
+        
+        Args:
+            video_url: URL of the video
+            
+        Returns:
+            Tuple of (audio_path, metadata)
+        """
+        # Download audio
+        audio_path = self._download_audio_from_url(video_url)
+        
+        # Get metadata
+        metadata = self._get_video_metadata(video_url)
+        
+        return audio_path, metadata
     def _save_video_data(self, video_data: bytes, filename: str) -> str:
         """Save video data to temporary file.
         

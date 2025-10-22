@@ -1,5 +1,5 @@
 """Video transcription service using Whisper with video processing capabilities."""
-
+import re
 import logging
 from typing import Dict, Any, Optional
 from werkzeug.datastructures import FileStorage
@@ -160,11 +160,26 @@ class VideoTranscriptionService:
         
         # Add formatted transcript array for consistency with other endpoints
         if result.get("transcript"):
-            # Split transcript into sentences for formatted array
-            import re
-            sentences = re.split(r'[.!?]+', result["transcript"])
+            # Split transcript into sentences using capturing group to preserve punctuation
+            # Use capturing group to preserve sentence-ending punctuation
+            parts = re.split(r'([.!?]+)', result["transcript"])
+            
+            # Reconstruct sentences with their punctuation
+            sentences = []
+            for i in range(0, len(parts) - 1, 2):
+                sentence = parts[i].strip()
+                if sentence:  # Only add non-empty sentences
+                    # Add punctuation if it exists
+                    if i + 1 < len(parts) and parts[i + 1]:
+                        sentence += parts[i + 1]
+                    sentences.append(sentence)
+            
+            # Handle case where transcript doesn't end with punctuation
+            if len(parts) % 2 == 1 and parts[-1].strip():
+                sentences.append(parts[-1].strip())
+            
             formatted["formatted_transcript_array"] = [
-                {"text": sentence.strip()} 
+                {"text": sentence} 
                 for sentence in sentences 
                 if sentence.strip()
             ]

@@ -126,6 +126,24 @@
                   "value": "nova-2",
                   "type": "text",
                   "description": "Deepgram model to use"
+                },
+                {
+                  "key": "diarize",
+                  "value": "false",
+                  "type": "text",
+                  "description": "Enable speaker diarization (true/false)"
+                },
+                {
+                  "key": "punctuate",
+                  "value": "true",
+                  "type": "text",
+                  "description": "Enable smart punctuation (true/false)"
+                },
+                {
+                  "key": "paragraphs",
+                  "value": "false",
+                  "type": "text",
+                  "description": "Enable paragraph detection (true/false)"
                 }
               ]
             },
@@ -134,7 +152,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["transcriptions", "deepgram"]
             },
-            "description": "Upload an audio file to transcribe using Deepgram's Nova-2 model"
+            "description": "Upload an audio file to transcribe using Deepgram's Nova-2 model with optional speaker diarization"
           },
           "response": [
             {
@@ -180,6 +198,55 @@
               ],
               "cookie": [],
               "body": "{\n  \"text\": \"Hello, this is a sample transcription of the audio file.\",\n  \"confidence\": 0.95,\n  \"language\": \"en\",\n  \"duration\": 30.5\n}"
+            },
+            {
+              "name": "Transcription with Diarization",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "x-api-key",
+                    "value": "{{apiKey}}",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "audio",
+                      "type": "file",
+                      "src": ""
+                    },
+                    {
+                      "key": "language",
+                      "value": "en",
+                      "type": "text"
+                    },
+                    {
+                      "key": "diarize",
+                      "value": "true",
+                      "type": "text"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/transcriptions/deepgram",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["transcriptions", "deepgram"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"transcript\": \"Hello, how are you doing today? I'm doing well, thank you for asking.\",\n  \"confidence\": 0.92,\n  \"language\": \"en\",\n  \"model\": \"nova-2\",\n  \"service\": \"deepgram\",\n  \"word_count\": 14,\n  \"duration_seconds\": 8.5,\n  \"processing_info\": {\n    \"service\": \"deepgram\",\n    \"model_used\": \"nova-2\",\n    \"language_requested\": \"en\",\n    \"diarization_enabled\": true,\n    \"paragraphs_enabled\": false\n  },\n  \"diarization\": {\n    \"speakers_detected\": 2,\n    \"total_duration\": 8.5,\n    \"speakers\": [\n      {\n        \"speaker_id\": \"Speaker_0\",\n        \"total_words\": 8,\n        \"total_duration\": 4.2,\n        \"average_confidence\": 0.94,\n        \"speaking_percentage\": 49.4\n      },\n      {\n        \"speaker_id\": \"Speaker_1\",\n        \"total_words\": 6,\n        \"total_duration\": 4.3,\n        \"average_confidence\": 0.90,\n        \"speaking_percentage\": 50.6\n      }\n    ],\n    \"segments\": [\n      {\n        \"speaker\": \"Speaker_0\",\n        \"speaker_id\": 0,\n        \"text\": \"Hello, how are you doing today?\",\n        \"start_time\": 0.0,\n        \"end_time\": 2.8,\n        \"duration\": 2.8,\n        \"word_count\": 6\n      },\n      {\n        \"speaker\": \"Speaker_1\",\n        \"speaker_id\": 1,\n        \"text\": \"I'm doing well, thank you for asking.\",\n        \"start_time\": 3.0,\n        \"end_time\": 6.5,\n        \"duration\": 3.5,\n        \"word_count\": 8\n      }\n    ]\n  }\n}"
             }
           ]
         },
