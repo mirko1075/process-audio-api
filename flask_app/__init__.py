@@ -89,6 +89,7 @@ def register_blueprints(app: Flask) -> None:
     from flask_app.api.translation import bp as translation_bp
     from flask_app.api.postprocessing import bp as postprocessing_bp
     from flask_app.api.utilities import bp as utilities_bp
+    from flask_app.api.mcp import bp as mcp_bp  # MCP endpoint
     from api.auth import bp as auth_bp  # Authentication endpoints
     from api.user_config import bp as user_config_bp  # User provider configuration
     
@@ -98,6 +99,7 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(translation_bp, url_prefix='/translations')
     app.register_blueprint(postprocessing_bp)
     app.register_blueprint(utilities_bp, url_prefix='/utilities')
+    app.register_blueprint(mcp_bp)  # MCP endpoint at /mcp
     app.register_blueprint(auth_bp, url_prefix='/auth')  # Auth endpoints
     app.register_blueprint(user_config_bp)  # User config endpoints (already has /user-config prefix)
 
