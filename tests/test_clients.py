@@ -113,23 +113,21 @@ def test_openai_client_timeout_configuration(mock_openai, mock_env):
 
 
 def test_error_handling_initialization():
-    """Test that clients handle missing API keys gracefully."""
-    # Clear API key environment
-    import os
+    """Test that clients handle missing API keys appropriately."""
+    # Remove API key temporarily
     original_key = os.environ.get('OPENAI_API_KEY')
     if 'OPENAI_API_KEY' in os.environ:
         del os.environ['OPENAI_API_KEY']
     
     try:
         from flask_app.clients.openai import OpenAIClient
-        client = OpenAIClient()
-        # If no exception is raised, the client might have fallback behavior
-        # which is also acceptable
-        assert client is not None
-    except Exception as e:
-        # Should raise an exception about missing API key
-        error_msg = str(e).lower()
-        assert "api key" in error_msg or "key not" in error_msg or "not configured" in error_msg
+        # The client now requires an API key parameter, so we test with empty/invalid key
+        with pytest.raises(Exception) as exc_info:
+            client = OpenAIClient(api_key="")
+        
+        # Should raise an exception about missing/invalid API key
+        error_msg = str(exc_info.value).lower()
+        assert any(phrase in error_msg for phrase in ["api key", "key not", "not configured", "invalid", "empty"])
     finally:
         # Restore original key
         if original_key:
