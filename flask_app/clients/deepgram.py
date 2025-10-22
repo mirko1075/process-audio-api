@@ -98,8 +98,6 @@ class DeepgramClient:
                 results = response.results
             elif hasattr(response, 'get'):
                 results = response.get('results', {})
-            elif isinstance(response, dict):
-                results = response.get('results', {})
             else:
                 logger.error(f"Unexpected response format: {type(response)}")
                 raise TranscriptionError("Invalid response format from Deepgram")
