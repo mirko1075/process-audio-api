@@ -1,8 +1,8 @@
 #!/bin/bash
-"""
-Test script for the authentication system.
-Run this after starting the application to verify all functionality.
-"""
+#
+# Test script for the authentication system.
+# Run this after starting the application to verify all functionality.
+#
 
 API_URL="http://localhost:5000"
 

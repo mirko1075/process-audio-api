@@ -7,38 +7,33 @@ from typing import Optional
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 
 logger = logging.getLogger(__name__)
-
 
 class APIKeyEncryption:
     """Encrypt/decrypt user API keys for secure storage."""
     
     def __init__(self):
-        self.encryption_key = self._derive_key()
-        self.cipher = Fernet(self.encryption_key)
-    
-    def _derive_key(self) -> bytes:
-        """Derive encryption key from app secret."""
         # Use Flask's SECRET_KEY for encryption
         secret = os.environ.get('SECRET_KEY')
         if not secret:
             raise ValueError("SECRET_KEY environment variable is required for API key encryption")
-        
-        password = secret.encode()
-        # Fixed salt for consistency - in production consider storing this securely
-        salt = b'saas_user_api_keys_2024'
-        
+        self.master_key = secret.encode()
+    
+    def _derive_key_from_salt(self, salt: bytes) -> bytes:
+        """Derive encryption key from master key and salt."""
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
             iterations=100000,
         )
-        key = base64.urlsafe_b64encode(kdf.derive(password))
+        return kdf.derive(self.master_key)
         return key
     
     def encrypt_api_key(self, api_key: str) -> str:
+
         """
         Encrypt API key for database storage.
         
@@ -46,7 +41,7 @@ class APIKeyEncryption:
             api_key: Plain text API key from user
             
         Returns:
-            Base64 encoded encrypted API key
+            Base64 encoded encrypted API key with salt
             
         Raises:
             ValueError: If api_key is empty or invalid
@@ -55,12 +50,16 @@ class APIKeyEncryption:
             raise ValueError("API key cannot be empty")
         
         try:
-            encrypted = self.cipher.encrypt(api_key.encode())
-            return base64.urlsafe_b64encode(encrypted).decode()
+            # Generate random salt for this key
+            salt = os.urandom(16)
+            key = self._derive_key_from_salt(salt)
+            cipher = ChaCha20Poly1305(key)
+            nonce = os.urandom(12)
+        
         except Exception as e:
             logger.error(f"Failed to encrypt API key: {e}")
-            raise ValueError("Failed to encrypt API key")
-    
+            raise ValueError("Failed to encrypt API key") from e
+            
     def decrypt_api_key(self, encrypted_key: str) -> str:
         """
         Decrypt API key for use in API calls.
@@ -78,9 +77,24 @@ class APIKeyEncryption:
             raise ValueError("Encrypted key cannot be empty")
         
         try:
-            encrypted_data = base64.urlsafe_b64decode(encrypted_key.encode())
-            decrypted = self.cipher.decrypt(encrypted_data)
+            combined_data = base64.urlsafe_b64decode(encrypted_key.encode())
+            
+            # Extract salt (first 16 bytes), nonce (next 12 bytes), and encrypted data
+            if len(combined_data) < 28:  # 16 + 12 minimum
+                raise ValueError("Invalid encrypted key format")
+            
+            salt = combined_data[:16]
+            nonce = combined_data[16:28]
+            encrypted_data = combined_data[28:]
+            
+            key = self._derive_key_from_salt(salt)
+            cipher = ChaCha20Poly1305(key)
+            
+            decrypted = cipher.decrypt(nonce, encrypted_data, None)
             return decrypted.decode()
+        except Exception as e:
+            logger.error(f"Failed to decrypt API key: {e}")
+            raise ValueError("Failed to decrypt API key - key may be corrupted")
         except Exception as e:
             logger.error(f"Failed to decrypt API key: {e}")
             raise ValueError("Failed to decrypt API key - key may be corrupted")
