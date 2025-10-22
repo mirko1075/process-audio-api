@@ -412,6 +412,45 @@ class DeepgramClient:
             logger.error(f"Error processing paragraphs: {str(e)}")
             return []
 
+    def _extract_metadata(self, results: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract metadata from Deepgram results.
+        
+        Args:
+            results: Deepgram API response results
+            
+        Returns:
+            Dictionary containing extracted metadata
+        """
+        try:
+            metadata = {}
+            
+            # Extract channel information
+            channels = results.get('channels', [])
+            if channels and len(channels) > 0:
+                channel = channels[0]
+                alternatives = channel.get('alternatives', [])
+                if alternatives and len(alternatives) > 0:
+                    alternative = alternatives[0]
+                    
+                    # Extract words for diarization
+                    words = alternative.get('words', [])
+                    metadata['words'] = words
+                    
+                    # Extract timing information
+                    if words:
+                        metadata['duration'] = words[-1].get('end', 0.0) if words else 0.0
+                    
+                    # Extract detected language
+                    detected_language = alternative.get('detected_language')
+                    if detected_language:
+                        metadata['detected_language'] = detected_language
+            
+            return metadata
+            
+        except Exception as e:
+            logger.error(f"Error extracting metadata: {str(e)}")
+            return {}
+
 
 @lru_cache(maxsize=1)
 def get_deepgram_client() -> DeepgramClient:
