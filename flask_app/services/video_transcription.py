@@ -1,5 +1,5 @@
 """Video transcription service using Whisper with video processing capabilities."""
-
+import re
 import logging
 from typing import Dict, Any, Optional
 from werkzeug.datastructures import FileStorage
@@ -161,7 +161,6 @@ class VideoTranscriptionService:
         # Add formatted transcript array for consistency with other endpoints
         if result.get("transcript"):
             # Split transcript into sentences using capturing group to preserve punctuation
-            import re
             # Use capturing group to preserve sentence-ending punctuation
             parts = re.split(r'([.!?]+)', result["transcript"])
             
