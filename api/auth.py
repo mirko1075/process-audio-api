@@ -26,8 +26,8 @@ def validate_password(password):
     if not password:
         raise InvalidRequestError("Password is required")
     
-    if len(password) < 6:
-        raise InvalidRequestError("Password must be at least 6 characters long")
+    if len(password) < 8:
+        raise InvalidRequestError("Password must be at least 8 characters long")
     
     # Additional security checks (recommended)
     if len(password.strip()) != len(password):

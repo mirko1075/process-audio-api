@@ -4,8 +4,31 @@ echo "🧪 Testing Database Safety Features"
 echo "=================================="
 echo
 
-# Set the Python path
-PYTHON_CMD="/home/msiddi/Documents/personal/python/render-audio-transcription/.venv/bin/python"
+# Get the script directory and project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Check for virtual environment and use appropriate Python command
+# Priority order:
+# 1. Project's .venv/bin/python (if exists)
+# 2. python (if VIRTUAL_ENV is active)
+# 3. python3 (if available in PATH)
+# 4. python (fallback)
+if [[ -f "$PROJECT_ROOT/.venv/bin/python" ]]; then
+    PYTHON_CMD="$PROJECT_ROOT/.venv/bin/python"
+elif [[ -n "$VIRTUAL_ENV" ]]; then
+    PYTHON_CMD="python"
+elif command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+else
+    PYTHON_CMD="python"
+fi
+
+echo "🐍 Using Python: $PYTHON_CMD"
+echo
+
+# Change to project root to ensure relative paths work
+cd "$PROJECT_ROOT"
 
 # Test 1: Help functionality
 echo "📖 Test 1: Help functionality"

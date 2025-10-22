@@ -105,6 +105,60 @@ class TestUserRegistration:
         data = json.loads(response.data)
         assert 'Missing required field' in data['error']
 
+    def test_register_password_validation(self, client):
+        """Test registration with various password validation scenarios."""
+        # Test password too short (less than 8 characters)
+        response = client.post('/auth/register', json={
+            'email': 'test@example.com',
+            'password': 'abc123',  # Only 6 characters
+            'first_name': 'Test',
+            'last_name': 'User',
+            'company': 'Test Company'
+        })
+        
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert 'Password must be at least 8 characters long' in data['error']
+        
+        # Test password without numbers
+        response = client.post('/auth/register', json={
+            'email': 'test@example.com',
+            'password': 'password',  # No numbers
+            'first_name': 'Test',
+            'last_name': 'User',
+            'company': 'Test Company'
+        })
+        
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert 'Password must contain at least one number' in data['error']
+        
+        # Test password without letters
+        response = client.post('/auth/register', json={
+            'email': 'test@example.com',
+            'password': '12345678',  # No letters
+            'first_name': 'Test',
+            'last_name': 'User',
+            'company': 'Test Company'
+        })
+        
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert 'Password must contain at least one letter' in data['error']
+        
+        # Test password with leading/trailing whitespace
+        response = client.post('/auth/register', json={
+            'email': 'test@example.com',
+            'password': ' password123 ',  # Whitespace
+            'first_name': 'Test',
+            'last_name': 'User',
+            'company': 'Test Company'
+        })
+        
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert 'Password cannot start or end with whitespace' in data['error']
+
 class TestUserLogin:
     """Test user login endpoint."""
     

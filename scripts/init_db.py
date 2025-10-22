@@ -154,7 +154,7 @@ def create_test_user():
                 plan='pro',
                 email_verified=True
             )
-            test_user.set_password('test123')
+            test_user.set_password('test1234')
             
             db.session.add(test_user)
             db.session.commit()
@@ -164,7 +164,7 @@ def create_test_user():
             
             print("✅ Test user created!")
             print(f"   Email: test@example.com")
-            print(f"   Password: test123")
+            print(f"   Password: test1234")
             print(f"   API Key: {test_api_key}")
             
     except Exception as e:
