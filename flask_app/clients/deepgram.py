@@ -1,9 +1,12 @@
 """Deepgram API client for transcription services."""
 import logging
-from typing import Dict, Any, Union
+from typing import Dict, Any
 from functools import lru_cache
 
-from deepgram import DeepgramClient as DGClient, PrerecordedOptions, FileSource
+from deepgram import (
+    DeepgramClient as DGClient, 
+    PrerecordedOptions
+)
 from utils.config import get_app_config
 from utils.exceptions import TranscriptionError
 
@@ -19,8 +22,12 @@ class DeepgramClient:
         if not config.deepgram.api_key:
             raise TranscriptionError("Deepgram API key not configured")
             
-        self._client = DGClient(config.deepgram.api_key)
-        logger.info("Deepgram client initialized successfully")
+        try:
+            self._client = DGClient(config.deepgram.api_key)
+            logger.info("Deepgram client initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize Deepgram client: {e}")
+            raise TranscriptionError(f"Deepgram client initialization failed: {str(e)}")
     
     def transcribe(self, audio_data: bytes, language: str = 'en', 
                   model: str = 'nova-2') -> Dict[str, Any]:
@@ -37,7 +44,7 @@ class DeepgramClient:
         logger.info(f"Starting Deepgram transcription with model {model}, language {language}")
         
         try:
-            # Configure transcription options
+            # Configure transcription options with explicit typing
             options = PrerecordedOptions(
                 model=model,
                 language=language,
@@ -48,13 +55,20 @@ class DeepgramClient:
                 keywords=['medical', 'doctor', 'patient', 'diagnosis', 'treatment']
             )
             
-            # Create file source from bytes
-            payload = FileSource(audio_data)
+            # Create file source from bytes - use dict format for v3.10+
+            payload = {"buffer": audio_data}
             
-            # Perform transcription
-            response = self._client.listen.prerecorded.v('1').transcribe_file(
+            # Perform transcription with error handling
+            logger.debug("Sending transcription request to Deepgram API")
+            
+            # Use the updated API call format for v3.10+
+            response = self._client.listen.rest.v("1").transcribe_file(
                 payload, options
             )
+            
+            # Check if response is valid
+            if not response:
+                raise TranscriptionError("Empty response from Deepgram API")
             
             # Format and return result
             result = self._format_transcript(response)
@@ -62,6 +76,9 @@ class DeepgramClient:
             logger.info(f"Deepgram transcription completed: {len(result['transcript'])} characters")
             return result
             
+        except TranscriptionError:
+            # Re-raise our custom errors
+            raise
         except Exception as exc:
             logger.error(f"Deepgram API error: {exc}")
             raise TranscriptionError(f"Deepgram transcription failed: {str(exc)}") from exc
@@ -76,19 +93,30 @@ class DeepgramClient:
             Formatted transcription result
         """
         try:
-            # Handle both response object and dict formats
+            # Handle both response object and dict formats more safely
             if hasattr(response, 'results'):
                 results = response.results
-            else:
+            elif hasattr(response, 'get'):
                 results = response.get('results', {})
+            else:
+                logger.error(f"Unexpected response format: {type(response)}")
+                raise TranscriptionError("Invalid response format from Deepgram")
+            
+            # Convert to dict if it's an object
+            if hasattr(results, 'to_dict'):
+                results = results.to_dict()
+            elif hasattr(results, '__dict__'):
+                results = results.__dict__
             
             # Extract transcript text
             channels = results.get('channels', [])
             if not channels:
+                logger.warning("No channels found in Deepgram response")
                 return {"transcript": "", "confidence": 0.0}
             
             alternatives = channels[0].get('alternatives', [])
             if not alternatives:
+                logger.warning("No alternatives found in Deepgram response")
                 return {"transcript": "", "confidence": 0.0}
             
             # Get the best alternative
@@ -96,7 +124,7 @@ class DeepgramClient:
             transcript = best_alternative.get('transcript', '')
             confidence = best_alternative.get('confidence', 0.0)
             
-            # Extract additional metadata
+            # Extract additional metadata safely
             metadata = self._extract_metadata(results)
             
             return {
@@ -110,26 +138,90 @@ class DeepgramClient:
             
         except Exception as exc:
             logger.error(f"Error formatting Deepgram response: {exc}")
-            raise TranscriptionError(f"Failed to format Deepgram response: {str(exc)}") from exc
+            raise TranscriptionError(f"Error formatting Deepgram response: {exc}")  from exc
     
-    def _extract_metadata(self, results: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract additional metadata from Deepgram response."""
+            raise TranscriptionError(f"Error formatting Deepgram response: {exc}") from exc
+        """Extract additional metadata from Deepgram response.
+        
+        Args:
+            results: Deepgram results dictionary
+            
+        Returns:
+            Dictionary containing metadata
+        """
         metadata = {}
         
         try:
-            # Get audio duration and word count
-            channels = results.get('channels', [])
-            if channels:
-                alternatives = channels[0].get('alternatives', [])
-                if alternatives:
-                    words = alternatives[0].get('words', [])
-                    metadata['word_count'] = len(words)
+            # Handle results conversion to dict if needed
+            if hasattr(results, 'to_dict'):
+                results_dict = results.to_dict()
+            elif hasattr(results, '__dict__'):
+                results_dict = results.__dict__
+            else:
+                results_dict = results
+            
+            # Extract basic metadata
+            metadata_section = results_dict.get('metadata', {})
+            if metadata_section:
+                if hasattr(metadata_section, 'to_dict'):
+                    metadata_section = metadata_section.to_dict()
+                elif hasattr(metadata_section, '__dict__'):
+                    metadata_section = metadata_section.__dict__
+                
+                metadata.update({
+                    "duration": metadata_section.get('duration'),
+                    "channels": metadata_section.get('channels'),
+                    "model_info": metadata_section.get('model_info', {}),
+                    "request_id": metadata_section.get('request_id')
+                })
+            
+            # Extract channels metadata
+            channels = results_dict.get('channels', [])
+            if channels and len(channels) > 0:
+                channel = channels[0]
+                if hasattr(channel, 'to_dict'):
+                    channel = channel.to_dict()
+                elif hasattr(channel, '__dict__'):
+                    channel = channel.__dict__
+                
+                alternatives = channel.get('alternatives', [])
+                if alternatives and len(alternatives) > 0:
+                    alternative = alternatives[0]
+                    if hasattr(alternative, 'to_dict'):
+                        alternative = alternative.to_dict()
+                    elif hasattr(alternative, '__dict__'):
+                        alternative = alternative.__dict__
                     
+                    words = alternative.get('words', [])
                     if words:
+                        # Convert word objects to dicts and extract timing info
+                        word_list = []
+                        for word in words:
+                            if hasattr(word, 'to_dict'):
+                                word_dict = word.to_dict()
+                            elif hasattr(word, '__dict__'):
+                                word_dict = word.__dict__
+                            else:
+                                word_dict = word
+                            word_list.append(word_dict)
+                        
+                        metadata['word_count'] = len(word_list)
+                        metadata['words'] = word_list
+                        
                         # Calculate duration from first to last word
-                        start_time = words[0].get('start', 0)
-                        end_time = words[-1].get('end', 0)
-                        metadata['duration_seconds'] = end_time - start_time
+                        if word_list:
+                            start_time = word_list[0].get('start', 0)
+                            end_time = word_list[-1].get('end', 0)
+                            metadata['duration_seconds'] = end_time - start_time
+                
+                # Extract language detection info
+                metadata.update({
+                    "detected_language": channel.get('detected_language'),
+                    "language_confidence": channel.get('language_confidence')
+                })
+
+            return metadata
+        
         except Exception as exc:
             logger.warning(f"Could not extract metadata: {exc}")
         

@@ -6,6 +6,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PORT=5000
 
+# Install system dependencies for audio processing
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libsndfile1 \
+    libsndfile1-dev \
+    portaudio19-dev \
+    libasound2-dev \
+    libpulse-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
