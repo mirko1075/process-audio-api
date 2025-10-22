@@ -1,5 +1,6 @@
 """Video processing client for URL and file-based video transcription."""
 
+import math
 import os
 import tempfile
 import logging
@@ -341,8 +342,8 @@ class VideoProcessor:
         for segment in segments:
             if "avg_logprob" in segment and "end" in segment and "start" in segment:
                 duration = segment["end"] - segment["start"]
-                # Convert log probability to confidence (approximate)
-                confidence = max(0.0, min(1.0, (segment["avg_logprob"] + 1.0)))
+                # Convert log probability to confidence using exponential
+                confidence = max(0.0, min(1.0, math.exp(segment["avg_logprob"])))
                 total_confidence += confidence * duration
                 total_duration += duration
         
@@ -365,7 +366,7 @@ class VideoProcessor:
                 "text": segment.get("text", "").strip(),
             }
             if "avg_logprob" in segment:
-                formatted_segment["confidence"] = max(0.0, min(1.0, (segment["avg_logprob"] + 1.0)))
+                formatted_segment["confidence"] = max(0.0, min(1.0, math.exp(segment["avg_logprob"])))
             formatted_segments.append(formatted_segment)
         
         return formatted_segments

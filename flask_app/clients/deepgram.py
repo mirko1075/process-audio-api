@@ -105,8 +105,6 @@ class DeepgramClient:
                 results = response.results
             elif hasattr(response, 'get'):
                 results = response.get('results', {})
-            elif isinstance(response, dict):
-                results = response.get('results', {})
             else:
                 logger.error(f"Unexpected response format: {type(response)}")
                 raise TranscriptionError("Invalid response format from Deepgram")
@@ -161,14 +159,9 @@ class DeepgramClient:
             
         except Exception as exc:
             logger.error(f"Error formatting Deepgram response: {exc}")
-            # Return a basic response instead of failing completely
-            return {
-                "transcript": "",
-                "confidence": 0.0,
-                "error": f"Response formatting failed: {str(exc)}"
-            }
+            raise TranscriptionError(f"Error formatting Deepgram response: {exc}")  from exc
     
-    def _extract_metadata(self, results: Dict[str, Any]) -> Dict[str, Any]:
+            raise TranscriptionError(f"Error formatting Deepgram response: {exc}") from exc
         """Extract additional metadata from Deepgram response.
         
         Args:
@@ -247,7 +240,9 @@ class DeepgramClient:
                     "detected_language": channel.get('detected_language'),
                     "language_confidence": channel.get('language_confidence')
                 })
-            
+
+            return metadata
+        
         except Exception as exc:
             logger.warning(f"Could not extract metadata: {exc}")
         

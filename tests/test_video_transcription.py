@@ -100,28 +100,27 @@ class TestVideoProcessor:
         assert self.processor._model_size == "base"
     
     def test_validate_url_youtube(self):
-        """Test URL validation - processor handles URLs through process_video_url."""
-        # Test that process_video_url accepts valid YouTube URLs
-        with patch.object(self.processor, '_download_audio_from_url') as mock_download, \
-             patch.object(self.processor, '_transcribe_audio_file') as mock_transcribe:
-            
-            mock_download.return_value = "/tmp/audio.wav"
-            mock_transcribe.return_value = {"text": "test", "confidence": 0.9}
-            
-            # Should not raise exception for valid URL
-            url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-            try:
-                result = self.processor.process_video_url(url, model_size="tiny")
-                assert 'transcript' in result
-            except Exception as e:
-                # It's OK if it fails due to network/download, we're testing URL acceptance
-                pass
+        """Test URL validation for YouTube URLs."""
+        valid_urls = [
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "https://youtu.be/dQw4w9WgXcQ",
+            "https://m.youtube.com/watch?v=dQw4w9WgXcQ"
+        ]
+        
+        for url in valid_urls:
+            assert self.processor._is_valid_url(url)
     
     def test_validate_url_invalid(self):
         """Test URL validation for invalid URLs."""
-        # Test that empty URL raises error
-        with pytest.raises(Exception):  # Should raise TranscriptionError or similar
-            self.processor.process_video_url("", model_size="tiny")
+        invalid_urls = [
+            "not_a_url",
+            "http://",
+            "ftp://example.com",
+            ""
+        ]
+        
+        for url in invalid_urls:
+            assert not self.processor._is_valid_url(url)
     
     @patch('flask_app.clients.video_processor.yt_dlp.YoutubeDL')
     def test_download_video_success(self, mock_ytdl_class):

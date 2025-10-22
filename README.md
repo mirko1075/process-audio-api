@@ -6,7 +6,7 @@ A production-ready Flask backend for transcribing, translating and analyzing med
 
 This Flask application follows modern best practices with a modular architecture:
 
-```
+```Graph
 flask_app/
   __init__.py                 # Application factory
   api/                        # Flask blueprints (routes + business logic)
@@ -73,12 +73,14 @@ app.py                        # Main application entry point
 ## 📡 API Endpoints
 
 ### **🔍 Health & Status**
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/` | Root welcome message |
 | `GET` | `/health` | Health check & system status |
 
 ### **🎤 Transcription Services**
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/transcriptions/deepgram` | Deepgram Nova-2 transcription with speaker diarization |
@@ -88,6 +90,7 @@ app.py                        # Main application entry point
 | `POST` | `/transcriptions/transcribe-and-translate` | **Combined** transcription + translation in one call |
 
 ### **🌐 Translation Services**
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/translations/openai` | OpenAI GPT-4 medical translation (with text chunking) |
@@ -95,17 +98,20 @@ app.py                        # Main application entry point
 | `POST` | `/translations/deepseek` | DeepSeek AI medical translation (specialized for Asian languages) |
 
 ### **📄 Document Generation**
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/documents/<format>` | Generate documents: `word`, `excel`, `pdf`, `text` |
 
 ### **📊 Analytics & Reporting**
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/sentiment` | Sentiment analysis using hospital reviews model |
 | `POST` | `/reports/<format>` | Generate reports: `monthly`, `billing` |
 
 ### **🛠️ Utilities**
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/utilities/audio-duration` | Get audio file duration in minutes |
@@ -129,6 +135,7 @@ app.py                        # Main application entry point
 ## 🚢 Deployment
 
 ### **Docker (Recommended)**
+
 ```bash
 # Build and run with Docker Compose
 docker-compose up --build
@@ -143,6 +150,7 @@ docker run -p 5000:5000 --env-file .env medical-transcription-api
 Render is a modern cloud platform ideal for deploying Flask APIs with automatic CI/CD.
 
 #### **1. Preparazione Repository**
+
 ```bash
 # Make sure your repository is pushed to GitHub
 git add .
@@ -155,7 +163,8 @@ git push origin main
 1. **Crea un nuovo Web Service** su [render.com](https://render.com)
 2. **Connetti il repository GitHub**: `mirko1075/process-audio-api`
 3. **Configura il servizio**:
-   ```
+
+   ```text
    Name: medical-transcription-api
    Environment: Docker
    Branch: main
@@ -163,6 +172,7 @@ git push origin main
    ```
 
 #### **3. Variabili d'Ambiente**
+
 Add all the following environment variables in the Render dashboard:
 
 ```bash
@@ -322,6 +332,7 @@ LOG_LEVEL=INFO
 ```
 
 #### **4. Configurazione Avanzata**
+
 ```bash
 # Instance Type: Starter (512MB RAM) o Standard (2GB RAM)
 # Auto-Deploy: Yes (for automatic CI/CD)
@@ -329,7 +340,9 @@ LOG_LEVEL=INFO
 ```
 
 #### **5. Build Commands**
+
 Render utilizzerà automaticamente il `Dockerfile` presente nel repository:
+
 ```dockerfile
 # Il Dockerfile gestisce automaticamente:
 # - Installazione dipendenze da requirements.txt
@@ -339,6 +352,7 @@ Render utilizzerà automaticamente il `Dockerfile` presente nel repository:
 ```
 
 #### **6. Deploy and Verification**
+
 ```bash
 # URL del tuo servizio (esempio):
 https://medical-transcription-api.onrender.com
@@ -354,6 +368,7 @@ curl -X POST https://medical-transcription-api.onrender.com/transcriptions/deepg
 ```
 
 #### **7. Monitoraggio**
+
 - **Logs**: Visualizza in tempo reale nel dashboard Render
 - **Metrics**: CPU, Memory, Request count automatici
 - **Alerts**: Configura notifiche per downtime
@@ -361,13 +376,15 @@ curl -X POST https://medical-transcription-api.onrender.com/transcriptions/deepg
 
 #### **🔧 Troubleshooting Render**
 
-**Errore 1: ModuleNotFoundError: No module named 'flask_cors'**
+**Errore 1: ModuleNotFoundError: No module named 'flask_cors'**:
+
 ```bash
 # Soluzione: Assicurati che Flask-CORS sia nel requirements.txt
 Flask-CORS==5.0.0
 ```
 
-**Errore 2: Port binding issues**
+**Errore 2: Port binding issues**:
+
 ```bash
 # Soluzione: Render usa la variabile PORT dinamica
 # Il Dockerfile è già configurato per usare $PORT
@@ -376,7 +393,8 @@ Flask-CORS==5.0.0
 # Start Command: (lascia vuoto, usa il CMD del Dockerfile)
 ```
 
-**Errore 3: Environment variables non trovate**
+**Errore 3: Environment variables non trovate**:
+
 ```bash
 # Soluzione: Nel dashboard Render, verifica di aver aggiunto:
 FLASK_APP=app.py
@@ -387,7 +405,8 @@ OPENAI_API_KEY=your-key
 # ... altre variabili necessarie
 ```
 
-**Errore 4: Build timeout o out of memory**
+**Errore 4: Build timeout o out of memory**:
+
 ```bash
 # Soluzione: Aggiungi .dockerignore per escludere file non necessari:
 echo "__pycache__" >> .dockerignore
@@ -397,19 +416,22 @@ echo "node_modules" >> .dockerignore
 echo ".venv" >> .dockerignore
 ```
 
-**Errore 5: Gunicorn workers crash**
+**Errore 5: Gunicorn workers crash**:
+
 ```bash
 # Soluzione: Il Dockerfile usa 4 workers, riduci a 2 per Starter plan
 # Modifica nel Dockerfile: --workers 2
 ```
 
 ### **Other Cloud Platforms**
+
 - **Railway**: Deploy simile a Render, GitHub integration
 - **AWS ECS/Fargate**: Use the included Dockerfile
 - **Google Cloud Run**: Auto-scaling container deployment
 - **Heroku**: Git-based deployment with Procfile
 
 ### **Production Configuration**
+
 - Uses `gunicorn` WSGI server with 4 workers
 - Configured for dynamic port binding (Render/Heroku compatible)
 - Health checks available at `/health`
