@@ -77,7 +77,7 @@ Enhanced system parameters:
 }
 ```
 
-### Chunck Configuration
+### Chunk Configuration
 
 The chunking behavior can be customized:
 
