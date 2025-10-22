@@ -140,7 +140,7 @@ class DeepgramClient:
             logger.error(f"Error formatting Deepgram response: {exc}")
             raise TranscriptionError(f"Error formatting Deepgram response: {exc}")  from exc
     
-    def _extract_metadata(self, results: Dict[str, Any]) -> Dict[str, Any]:
+            raise TranscriptionError(f"Error formatting Deepgram response: {exc}") from exc
         """Extract additional metadata from Deepgram response.
         
         Args:
