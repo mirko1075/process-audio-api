@@ -108,3 +108,70 @@ def test_cors_headers(client):
     response = client.options("/health")
     # Basic CORS check - should not be 404
     assert response.status_code in [200, 204]
+
+
+def test_video_transcription_endpoint_auth(client):
+    """Test video transcription endpoint requires authentication."""
+    # Test without API key
+    response = client.post("/transcriptions/video")
+    assert response.status_code == 401
+
+
+def test_video_transcription_missing_data(client):
+    """Test video transcription endpoint with missing data."""
+    headers = {"x-api-key": "test-api-key"}
+    
+    # Test with empty JSON
+    response = client.post("/transcriptions/video", headers=headers, json={})
+    assert response.status_code == 400
+    
+    # Test with invalid JSON structure
+    response = client.post("/transcriptions/video", headers=headers, json={"invalid": "data"})
+    assert response.status_code == 400
+
+
+def test_video_transcription_url_structure(client):
+    """Test video transcription endpoint accepts URL structure."""
+    headers = {"x-api-key": "test-api-key", "Content-Type": "application/json"}
+    data = {
+        "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "model_size": "tiny",
+        "auto_detect_language": True
+    }
+    
+    response = client.post("/transcriptions/video", headers=headers, json=data)
+    # Should get past authentication and validation, may fail at processing
+    assert response.status_code in [200, 400, 500]
+
+
+def test_video_transcription_file_upload_structure(client):
+    """Test video transcription endpoint accepts file upload structure."""
+    headers = {"x-api-key": "test-api-key"}
+    
+    # Create a fake video file for testing structure
+    fake_video = io.BytesIO(b"fake video data")
+    fake_video.name = "test.mp4"
+    
+    response = client.post("/transcriptions/video",
+                         headers=headers,
+                         data={
+                             "video": (fake_video, "test.mp4"),
+                             "model_size": "small",
+                             "auto_detect_language": "true"
+                         })
+    
+    # Should get past authentication and basic validation
+    assert response.status_code in [200, 400, 500]
+
+
+def test_video_transcription_invalid_model_size(client):
+    """Test video transcription with invalid model size."""
+    headers = {"x-api-key": "test-api-key", "Content-Type": "application/json"}
+    data = {
+        "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "model_size": "invalid_model",
+        "auto_detect_language": True
+    }
+    
+    response = client.post("/transcriptions/video", headers=headers, json=data)
+    assert response.status_code == 400
