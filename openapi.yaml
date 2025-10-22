@@ -47,7 +47,7 @@ paths:
                 password:
                   type: string
                   format: password
-                  description: User password (minimum 6 characters)
+                  description: User password (minimum 8 characters)
                   example: "password123"
                 first_name:
                   type: string

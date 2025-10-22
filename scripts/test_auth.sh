@@ -1,8 +1,6 @@
 #!/bin/bash
-#
 # Test script for the authentication system.
 # Run this after starting the application to verify all functionality.
-#
 
 API_URL="http://localhost:5000"
 
@@ -15,7 +13,7 @@ REGISTER_RESPONSE=$(curl -s -X POST "$API_URL/auth/register" \
   -H "Content-Type: application/json" \
   -d '{
     "email": "test-user@example.com",
-    "password": "test123",
+    "password": "test1234",
     "first_name": "Test",
     "last_name": "User",
     "company": "Test Corp"
@@ -40,7 +38,7 @@ LOGIN_RESPONSE=$(curl -s -X POST "$API_URL/auth/login" \
   -H "Content-Type: application/json" \
   -d '{
     "email": "test-user@example.com",
-    "password": "test123"
+    "password": "test1234"
   }')
 
 if echo "$LOGIN_RESPONSE" | grep -q "Login successful"; then

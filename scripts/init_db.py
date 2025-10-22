@@ -11,39 +11,48 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
 def is_safe_environment():
-    """Check if it's safe to perform destructive database operations."""
-    flask_env = os.environ.get('FLASK_ENV', '').lower()
-    app_env = os.environ.get('APP_ENV', '').lower()
-    database_url = os.environ.get('DATABASE_URL', '')
+    """Check if it's safe to drop tables (development environment)."""
+    flask_env = os.getenv('FLASK_ENV', '').lower()
+    environment = os.getenv('ENVIRONMENT', '').lower()
     
-    # Safe environments
-    safe_envs = ['development', 'dev', 'testing', 'test', 'local']
+    # Consider safe if explicitly set to development
+    safe_envs = ['development', 'dev', 'test', 'testing', 'local']
     
-    # Check environment variables
-    if flask_env in safe_envs or app_env in safe_envs:
-        return True
-    
-    # Check if using local development database
-    if any(indicator in database_url.lower() for indicator in ['localhost', '127.0.0.1', 'sqlite']):
-        return True
-    
-    return False
+    return flask_env in safe_envs or environment in safe_envs
 
 def confirm_destructive_action():
-    """Get user confirmation for destructive database operations."""
+    """Ask user for confirmation before destructive database operations."""
     print("⚠️  WARNING: This will DELETE ALL existing data in the database!")
-    print("🗄️  Database URL:", os.environ.get('DATABASE_URL', 'Not set'))
-    print("🔧 Environment:", os.environ.get('FLASK_ENV', 'Not set'))
+    print("   This action cannot be undone.")
     print()
     
-    response = input("Type 'DELETE ALL DATA' to confirm (anything else to cancel): ")
-    return response == 'DELETE ALL DATA'
+    response = input("Are you sure you want to continue? Type 'yes' to confirm: ").strip().lower()
+    return response == 'yes'
 
-def init_database(force_unsafe=False):
+def create_tables_only():
+    """Create tables without dropping existing ones (safe mode)."""
+    try:
+        from flask_app import create_app
+        from models import db
+        
+        app = create_app()
+        
+        with app.app_context():
+            print("🗄️  Creating database tables (safe mode - no data loss)...")
+            db.create_all()
+            print("✅ Database tables created successfully!")
+            
+    except Exception as e:
+        print(f"❌ Error creating tables: {str(e)}")
+        return False
+    
+    return True
+
+def init_database(force_drop=False):
     """Initialize database and create admin user.
     
     Args:
-        force_unsafe: If True, skip safety checks (use with extreme caution)
+        force_drop: If True, skip safety checks and force table dropping
     """
     try:
         from flask_app import create_app
@@ -67,6 +76,24 @@ def init_database(force_unsafe=False):
         app = create_app()
         
         with app.app_context():
+            # Safety check for production environments
+            if not force_drop:
+                if not is_safe_environment():
+                    print("🚨 PRODUCTION ENVIRONMENT DETECTED!")
+                    print("   Environment variables suggest this is not a development environment.")
+                    print("   Current FLASK_ENV:", os.getenv('FLASK_ENV', 'not set'))
+                    print("   Current ENVIRONMENT:", os.getenv('ENVIRONMENT', 'not set'))
+                    print()
+                    print("   Options:")
+                    print("   1. Run with --force to override safety checks")
+                    print("   2. Run with --safe to create tables without dropping existing data")
+                    print("   3. Set FLASK_ENV=development or ENVIRONMENT=development")
+                    return False
+                
+                if not confirm_destructive_action():
+                    print("❌ Operation cancelled by user.")
+                    return False
+            
             print("🗄️  Dropping existing tables...")
             db.drop_all()
             
@@ -74,34 +101,40 @@ def init_database(force_unsafe=False):
             db.create_all()
             
             print("👤 Creating admin user...")
-            admin_user = User(
-                email='admin@example.com',
-                first_name='Admin',
-                last_name='User',
-                company='System',
-                plan='enterprise',
-                email_verified=True
-            )
-            admin_user.set_password('admin123')
             
-            db.session.add(admin_user)
-            db.session.commit()
-            
-            # Generate admin API key
-            admin_api_key = admin_user.generate_api_key("Admin API Key")
-            
-            print("✅ Database initialized successfully!")
-            print()
-            print("🔑 Admin Credentials:")
-            print(f"   Email: admin@example.com")
-            print(f"   Password: admin123")
-            print(f"   API Key: {admin_api_key}")
-            print()
-            print("📋 Next Steps:")
-            print("   1. Start the application: docker-compose up")
-            print("   2. Test auth endpoint: POST /auth/login")
-            print("   3. Create new users via: POST /auth/register")
-            print("   4. Use JWT or API keys for authentication")
+            # Check if admin user already exists
+            existing_admin = User.query.filter_by(email='admin@example.com').first()
+            if existing_admin:
+                print("⚠️  Admin user already exists, skipping creation...")
+            else:
+                admin_user = User(
+                    email='admin@example.com',
+                    first_name='Admin',
+                    last_name='User',
+                    company='System',
+                    plan='enterprise',
+                    email_verified=True
+                )
+                admin_user.set_password('admin123')
+                
+                db.session.add(admin_user)
+                db.session.commit()
+                
+                # Generate admin API key
+                admin_api_key = admin_user.generate_api_key("Admin API Key")
+                
+                print("✅ Database initialized successfully!")
+                print()
+                print("🔑 Admin Credentials:")
+                print(f"   Email: admin@example.com")
+                print(f"   Password: admin123")
+                print(f"   API Key: {admin_api_key}")
+                print()
+                print("📋 Next Steps:")
+                print("   1. Start the application: docker-compose up")
+                print("   2. Test auth endpoint: POST /auth/login")
+                print("   3. Create new users via: POST /auth/register")
+                print("   4. Use JWT or API keys for authentication")
             
     except Exception as e:
         print(f"❌ Error initializing database: {str(e)}")
@@ -134,7 +167,7 @@ def create_test_user():
                 plan='pro',
                 email_verified=True
             )
-            test_user.set_password('test123')
+            test_user.set_password('test1234')
             
             db.session.add(test_user)
             db.session.commit()
@@ -144,7 +177,7 @@ def create_test_user():
             
             print("✅ Test user created!")
             print(f"   Email: test@example.com")
-            print(f"   Password: test123")
+            print(f"   Password: test1234")
             print(f"   API Key: {test_api_key}")
             
     except Exception as e:
@@ -186,9 +219,32 @@ if __name__ == '__main__':
     
     logging.basicConfig(level=logging.INFO)
     
-    if args.test_user:
-        create_test_user()
-    elif args.create_only:
-        create_tables_only()
+    # Parse command line arguments
+    if len(sys.argv) > 1:
+        if sys.argv[1] == 'test-user':
+            create_test_user()
+        elif sys.argv[1] == '--safe':
+            print("🔒 Running in safe mode (no data loss)")
+            create_tables_only()
+        elif sys.argv[1] == '--force':
+            print("⚠️  Force mode: Bypassing safety checks")
+            init_database(force_drop=True)
+        elif sys.argv[1] == '--help':
+            print("Database Initialization Script")
+            print()
+            print("Usage:")
+            print("  python scripts/init_db.py            # Interactive initialization with safety checks")
+            print("  python scripts/init_db.py --safe     # Create tables only (no data loss)")
+            print("  python scripts/init_db.py --force    # Force initialization (bypass safety checks)")
+            print("  python scripts/init_db.py test-user  # Create test user only")
+            print("  python scripts/init_db.py --help     # Show this help message")
+            print()
+            print("Environment Variables:")
+            print("  FLASK_ENV=development    # Marks environment as safe for table dropping")
+            print("  ENVIRONMENT=development  # Alternative environment marker")
+        else:
+            print(f"❌ Unknown argument: {sys.argv[1]}")
+            print("   Use --help to see available options")
     else:
-        init_database(force_unsafe=args.force_unsafe)
+        # Default behavior with safety checks
+        init_database()

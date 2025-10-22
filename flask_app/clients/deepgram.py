@@ -113,8 +113,6 @@ class DeepgramClient:
                 results = response.results
             elif hasattr(response, 'get'):
                 results = response.get('results', {})
-            elif isinstance(response, dict):
-                results = response.get('results', {})
             else:
                 logger.error(f"Unexpected response format: {type(response)}")
                 raise TranscriptionError("Invalid response format from Deepgram")
@@ -169,14 +167,9 @@ class DeepgramClient:
             
         except Exception as exc:
             logger.error(f"Error formatting Deepgram response: {exc}")
-            # Return a basic response instead of failing completely
-            return {
-                "transcript": "",
-                "confidence": 0.0,
-                "error": f"Response formatting failed: {str(exc)}"
-            }
+            raise TranscriptionError(f"Error formatting Deepgram response: {exc}")  from exc
     
-    def _extract_metadata(self, results: Dict[str, Any]) -> Dict[str, Any]:
+            raise TranscriptionError(f"Error formatting Deepgram response: {exc}") from exc
         """Extract additional metadata from Deepgram response.
         
         Args:
@@ -255,7 +248,9 @@ class DeepgramClient:
                     "detected_language": channel.get('detected_language'),
                     "language_confidence": channel.get('language_confidence')
                 })
-            
+
+            return metadata
+        
         except Exception as exc:
             logger.warning(f"Could not extract metadata: {exc}")
         
@@ -424,6 +419,45 @@ class DeepgramClient:
         except Exception as e:
             logger.error(f"Error processing paragraphs: {str(e)}")
             return []
+
+    def _extract_metadata(self, results: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract metadata from Deepgram results.
+        
+        Args:
+            results: Deepgram API response results
+            
+        Returns:
+            Dictionary containing extracted metadata
+        """
+        try:
+            metadata = {}
+            
+            # Extract channel information
+            channels = results.get('channels', [])
+            if channels and len(channels) > 0:
+                channel = channels[0]
+                alternatives = channel.get('alternatives', [])
+                if alternatives and len(alternatives) > 0:
+                    alternative = alternatives[0]
+                    
+                    # Extract words for diarization
+                    words = alternative.get('words', [])
+                    metadata['words'] = words
+                    
+                    # Extract timing information
+                    if words:
+                        metadata['duration'] = words[-1].get('end', 0.0) if words else 0.0
+                    
+                    # Extract detected language
+                    detected_language = alternative.get('detected_language')
+                    if detected_language:
+                        metadata['detected_language'] = detected_language
+            
+            return metadata
+            
+        except Exception as e:
+            logger.error(f"Error extracting metadata: {str(e)}")
+            return {}
 
 
 @lru_cache(maxsize=1)

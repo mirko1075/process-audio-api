@@ -6,7 +6,7 @@ A production-ready Flask backend for transcribing, translating and analyzing med
 
 This Flask application follows modern best practices with a modular architecture:
 
-```
+```text
 flask_app/
   __init__.py                 # Application factory
   api/                        # Flask blueprints (routes + business logic)
@@ -73,12 +73,14 @@ app.py                        # Main application entry point
 ## 📡 API Endpoints
 
 ### **🔍 Health & Status**
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/` | Root welcome message |
 | `GET` | `/health` | Health check & system status |
 
 ### **🎤 Transcription Services**
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/transcriptions/deepgram` | Deepgram Nova-2 transcription with speaker diarization |
@@ -88,6 +90,7 @@ app.py                        # Main application entry point
 | `POST` | `/transcriptions/transcribe-and-translate` | **Combined** transcription + translation in one call |
 
 ### **🌐 Translation Services**
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/translations/openai` | OpenAI GPT-4 medical translation (with text chunking) |
@@ -95,17 +98,20 @@ app.py                        # Main application entry point
 | `POST` | `/translations/deepseek` | DeepSeek AI medical translation (specialized for Asian languages) |
 
 ### **📄 Document Generation**
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/documents/<format>` | Generate documents: `word`, `excel`, `pdf`, `text` |
 
 ### **📊 Analytics & Reporting**
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/sentiment` | Sentiment analysis using hospital reviews model |
 | `POST` | `/reports/<format>` | Generate reports: `monthly`, `billing` |
 
 ### **🛠️ Utilities**
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/utilities/audio-duration` | Get audio file duration in minutes |
@@ -129,6 +135,7 @@ app.py                        # Main application entry point
 ## 🚢 Deployment
 
 ### **Docker (Recommended)**
+
 ```bash
 # Build and run with Docker Compose
 docker-compose up --build
@@ -143,6 +150,7 @@ docker run -p 5000:5000 --env-file .env medical-transcription-api
 Render is a modern cloud platform ideal for deploying Flask APIs with automatic CI/CD.
 
 #### **1. Preparazione Repository**
+
 ```bash
 # Make sure your repository is pushed to GitHub
 git add .
@@ -163,6 +171,7 @@ git push origin main
    ```
 
 #### **3. Variabili d'Ambiente**
+
 Add all the following environment variables in the Render dashboard:
 
 ```bash
@@ -171,7 +180,6 @@ FLASK_APP=app.py
 FLASK_ENV=production
 PORT=5000
 
-# Authentication
 # 🔐 Authentication System
 
 This API supports **dual authentication modes** to accommodate both SaaS users and automated integrations:
@@ -207,6 +215,7 @@ curl -X POST https://your-api.com/transcriptions/deepgram \
 ```
 
 ### **2. API Key Authentication (For Integrations)**
+
 For Make.com, Zapier, scripts, and automated workflows:
 
 ```bash
@@ -217,11 +226,13 @@ curl -X POST https://your-api.com/transcriptions/deepgram \
 ```
 
 ### **3. Legacy Support**
+
 Existing integrations continue to work with the original static API key.
 
 ## **User Management**
 
 ### **Registration & Login**
+
 ```bash
 # Register
 POST /auth/register
@@ -243,6 +254,7 @@ POST /auth/login
 ```
 
 ### **API Key Management**
+
 ```bash
 # Get profile and API keys
 GET /auth/profile
@@ -263,6 +275,7 @@ Authorization: Bearer <jwt-token>
 ## **Database Setup**
 
 ### **Development (Docker)**
+
 ```bash
 # Start PostgreSQL
 docker compose up -d db
@@ -277,6 +290,7 @@ python scripts/init_db.py
 ```
 
 ### **Production (Render/Railway)**
+
 Set environment variables:
 ```env
 DATABASE_URL=postgresql://user:pass@host:5432/dbname
@@ -307,15 +321,18 @@ API_KEY=your-legacy-api-key  # for backward compatibility
 API_KEY=your-secure-api-key-here
 
 # AI Service API Keys (Obtain from respective platforms)
+
 DEEPGRAM_API_KEY=your_deepgram_key_here
 OPENAI_API_KEY=your_openai_key_here
 ASSEMBLYAI_API_KEY=your_assemblyai_key_here
 DEEPSEEK_API_KEY=your_deepseek_key_here
 
 # Google Cloud (Base64 del file credentials JSON)
+
 GOOGLE_APPLICATION_CREDENTIALS_JSON=base64_encoded_json_here
 
 # Optional Configuration
+
 GOOGLE_CLOUD_PROJECT_ID=your_project_id
 ALLOWED_ORIGINS=https://yourdomain.com,https://anotherdomain.com
 LOG_LEVEL=INFO
@@ -329,6 +346,7 @@ LOG_LEVEL=INFO
 ```
 
 #### **5. Build Commands**
+
 Render utilizzerà automaticamente il `Dockerfile` presente nel repository:
 ```dockerfile
 # Il Dockerfile gestisce automaticamente:
@@ -339,6 +357,7 @@ Render utilizzerà automaticamente il `Dockerfile` presente nel repository:
 ```
 
 #### **6. Deploy and Verification**
+
 ```bash
 # URL del tuo servizio (esempio):
 https://medical-transcription-api.onrender.com
@@ -354,6 +373,7 @@ curl -X POST https://medical-transcription-api.onrender.com/transcriptions/deepg
 ```
 
 #### **7. Monitoraggio**
+
 - **Logs**: Visualizza in tempo reale nel dashboard Render
 - **Metrics**: CPU, Memory, Request count automatici
 - **Alerts**: Configura notifiche per downtime
@@ -404,12 +424,14 @@ echo ".venv" >> .dockerignore
 ```
 
 ### **Other Cloud Platforms**
+
 - **Railway**: Deploy simile a Render, GitHub integration
 - **AWS ECS/Fargate**: Use the included Dockerfile
 - **Google Cloud Run**: Auto-scaling container deployment
 - **Heroku**: Git-based deployment with Procfile
 
 ### **Production Configuration**
+
 - Uses `gunicorn` WSGI server with 4 workers
 - Configured for dynamic port binding (Render/Heroku compatible)
 - Health checks available at `/health`

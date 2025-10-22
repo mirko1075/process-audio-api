@@ -1,29 +1,34 @@
 # 🎯 YouTube Video Transcription Fixes
 
 ## ❌ **Problema Originale**
-```
+
+```text
 ERROR: unable to download video data: HTTP Error 403: Forbidden
 ```
 
 ## ✅ **Soluzioni Implementate**
 
 ### **1. Configurazione yt-dlp Potenziata**
+
 - **User Agent**: Simulazione di browser reale (Chrome 119)
 - **Headers HTTP**: Headers completi per evitare detection
 - **Retry Logic**: Tentativi multipli con backoff esponenziale
 - **Formato Audio**: Specifiche migliorate per estrazione audio
 
 ### **2. Gestione Errori Migliorata**
+
 - **Errori Specifici**: Messaggi diversi per 403, 404, e altri errori
 - **Suggerimenti Automatici**: Consigli per risolvere problemi comuni
 - **Fallback**: Indicazioni per upload diretto di file video
 
 ### **3. Aggiornamento Automatico**
+
 - **Script**: `./scripts/update_ytdlp.sh` per aggiornare yt-dlp
 - **Versione**: Aggiornato da 2024.11.4 a 2025.10.14
 - **Compatibilità**: Supporto per restrizioni YouTube più recenti
 
 ### **4. Test e Debugging**
+
 - **Script Test**: `test_video_fixes.py` per verificare funzionalità
 - **Video Multipli**: Test con URL diversi per identificare pattern
 - **Logging**: Messaggi di debug più dettagliati
@@ -33,11 +38,13 @@ ERROR: unable to download video data: HTTP Error 403: Forbidden
 ## 🚀 **Come Testare le Fixes**
 
 ### **1. Aggiorna yt-dlp**
+
 ```bash
 ./scripts/update_ytdlp.sh
 ```
 
 ### **2. Testa con Video Semplici**
+
 ```bash
 curl -X POST http://localhost:5000/transcriptions/video \
   -H "x-api-key: your-key" \
@@ -49,12 +56,14 @@ curl -X POST http://localhost:5000/transcriptions/video \
 ```
 
 ### **3. Usa lo Script di Test**
+
 ```bash
 # Modifica API key in test_video_fixes.py
 python test_video_fixes.py
 ```
 
 ### **4. Fallback: Upload Diretto**
+
 ```bash
 curl -X POST http://localhost:5000/transcriptions/video \
   -H "x-api-key: your-key" \
@@ -67,6 +76,7 @@ curl -X POST http://localhost:5000/transcriptions/video \
 ## 🔧 **Modifiche Tecniche**
 
 ### **VideoProcessor** (`flask_app/clients/video_processor.py`)
+
 ```python
 # Enhanced yt-dlp options
 ydl_opts = {
@@ -87,6 +97,7 @@ ydl_opts = {
 ```
 
 ### **Error Messages** (Enhanced)
+
 ```python
 if "403" in error_msg or "Forbidden" in error_msg:
     raise TranscriptionError(
@@ -104,17 +115,20 @@ if "403" in error_msg or "Forbidden" in error_msg:
 ## 🎯 **Risultati Attesi**
 
 ### **✅ Dovrebbero Funzionare**
+
 - Video pubblici senza restrizioni
 - Video educativi/musicali standard
 - Video con audio chiaro e accessibile
 
 ### **⚠️ Potrebbero Fallire Ancora**
+
 - Video con restrizioni geografiche
 - Video che richiedono login
 - Video age-restricted
 - Video con protezioni specifiche dell'uploader
 
 ### **🔄 Alternative Sempre Disponibili**
+
 - Upload diretto di file video
 - Conversione locale video → audio → upload
 - Uso di altri servizi di transcription per video problematici

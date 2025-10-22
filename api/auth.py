@@ -1,11 +1,69 @@
 """Authentication endpoints for user management."""
 
 import logging
+import re
 from flask import Blueprint, request, jsonify, g
 from sqlalchemy.exc import IntegrityError
+from utils.exceptions import InvalidRequestError
 
 logger = logging.getLogger(__name__)
 bp = Blueprint('auth', __name__)
+
+
+def validate_password(password):
+    """
+    Validate password meets security requirements.
+    
+    Args:
+        password (str): Password to validate
+        
+    Raises:
+        InvalidRequestError: If password doesn't meet requirements
+        
+    Returns:
+        bool: True if password is valid
+    """
+    if not password:
+        raise InvalidRequestError("Password is required")
+    
+    if len(password) < 8:
+        raise InvalidRequestError("Password must be at least 8 characters long")
+    
+    # Additional security checks (recommended)
+    if len(password.strip()) != len(password):
+        raise InvalidRequestError("Password cannot start or end with whitespace")
+    
+    # Check for at least one letter and one number (recommended for stronger passwords)
+    if not re.search(r'[a-zA-Z]', password):
+        raise InvalidRequestError("Password must contain at least one letter")
+    
+    if not re.search(r'\d', password):
+        raise InvalidRequestError("Password must contain at least one number")
+    
+    return True
+
+
+def validate_email(email):
+    """
+    Validate email format.
+    
+    Args:
+        email (str): Email to validate
+        
+    Raises:
+        InvalidRequestError: If email format is invalid
+        
+    Returns:
+        bool: True if email is valid
+    """
+    if not email:
+        raise InvalidRequestError("Email is required")
+    
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_pattern, email):
+        raise InvalidRequestError("Invalid email format")
+    
+    return True
 
 @bp.route('/register', methods=['POST'])
 def register():
@@ -25,6 +83,18 @@ def register():
         
         email = data['email'].lower().strip()
         password = data['password']
+        
+        # Validate email format
+        try:
+            validate_email(email)
+        except InvalidRequestError as e:
+            return jsonify({'error': str(e)}), 400
+        
+        # Validate password before proceeding
+        try:
+            validate_password(password)
+        except InvalidRequestError as e:
+            return jsonify({'error': str(e)}), 400
         
         # Check if user exists
         if User.query.filter_by(email=email).first():

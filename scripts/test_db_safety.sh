@@ -1,37 +1,53 @@
 #!/bin/bash
-#
-# Test script for database initialization safety checks
-#
 
-echo "🧪 Testing Database Initialization Safety Checks"
-echo "================================================="
+echo "🧪 Testing Database Safety Features"
+echo "=================================="
+echo
 
-# Test 1: Production environment (should fail)
-echo ""
-echo "Test 1: Production Environment Safety Check"
-echo "-------------------------------------------"
-FLASK_ENV=production DATABASE_URL=postgresql://prod-server:5432/proddb .venv/bin/python scripts/init_db.py
+# Get the script directory and project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# Test 2: Development environment with safe operation
-echo ""
-echo "Test 2: Development Environment with Safe Operation"
-echo "---------------------------------------------------"
-echo "(This would work if database was available)"
-echo "Command: FLASK_ENV=development .venv/bin/python scripts/init_db.py --create-only"
+# Check for virtual environment and use appropriate Python command
+# Priority order:
+# 1. Project's .venv/bin/python (if exists)
+# 2. python (if VIRTUAL_ENV is active)
+# 3. python3 (if available in PATH)
+# 4. python (fallback)
+if [[ -f "$PROJECT_ROOT/.venv/bin/python" ]]; then
+    PYTHON_CMD="$PROJECT_ROOT/.venv/bin/python"
+elif [[ -n "$VIRTUAL_ENV" ]]; then
+    PYTHON_CMD="python"
+elif command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+else
+    PYTHON_CMD="python"
+fi
 
-# Test 3: Test user creation (always safe)
-echo ""
-echo "Test 3: Test User Creation (Safe Operation)"
-echo "-------------------------------------------"
-echo "(This would work if database was available)"
-echo "Command: .venv/bin/python scripts/init_db.py --test-user"
+echo "🐍 Using Python: $PYTHON_CMD"
+echo
 
-echo ""
-echo "🔒 Safety Features Summary:"
-echo "=========================="
-echo "✅ Environment detection (FLASK_ENV, APP_ENV)"
-echo "✅ Database URL analysis (localhost/sqlite = safe)"
-echo "✅ User confirmation for destructive operations"
-echo "✅ Safe operations (--create-only, --test-user)"
-echo "✅ Force override for development (--force-unsafe)"
-echo "✅ Detailed help and warnings"
+# Change to project root to ensure relative paths work
+cd "$PROJECT_ROOT"
+
+# Test 1: Help functionality
+echo "📖 Test 1: Help functionality"
+$PYTHON_CMD scripts/init_db.py --help
+echo
+
+# Test 2: Production environment detection
+echo "🚨 Test 2: Production environment detection"
+FLASK_ENV=production $PYTHON_CMD scripts/init_db.py 2>/dev/null | head -10
+echo
+
+# Test 3: Safe mode
+echo "🔒 Test 3: Safe mode (no data loss)"
+$PYTHON_CMD scripts/init_db.py --safe 2>/dev/null | head -5
+echo
+
+# Test 4: Development environment (should allow dropping)
+echo "🔧 Test 4: Development environment detection"
+FLASK_ENV=development $PYTHON_CMD scripts/init_db.py 2>/dev/null | head -10
+echo
+
+echo "✅ All safety tests completed!"

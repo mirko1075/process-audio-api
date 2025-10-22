@@ -5,11 +5,13 @@
 Il sistema implementa **doppia autenticazione** per supportare due flussi diversi:
 
 ### 🌐 **1. Frontend Web (JWT)**
+
 - Utente fa **login** → riceve **JWT token**
 - Per ogni richiesta: usa **JWT Bearer token**
 - Sistema cerca **chiavi provider** nel DB per l'utente
 
 ### 🔗 **2. Make.com / API Integration (API Key)**  
+
 - Utente usa **API key** generata
 - Per ogni richiesta: usa **x-api-key header**
 - Sistema cerca **chiavi provider** nel DB per l'utente
@@ -19,6 +21,7 @@ Il sistema implementa **doppia autenticazione** per supportare due flussi divers
 ## 🏗️ **Architecture Components**
 
 ### **1. Authentication Models** (`models/auth.py`)
+
 ```python
 class User:
     - email, password_hash
@@ -33,6 +36,7 @@ class ApiKey:
 ```
 
 ### **2. Authentication Middleware** (`utils/auth_middleware.py`)
+
 ```python
 @dual_auth_required     # For transcription/translation endpoints
 @jwt_required_only      # For user-config endpoints  
@@ -45,6 +49,7 @@ class ApiKey:
 ```
 
 ### **3. User Provider Service** (`services/user_provider.py`)
+
 ```python
 class UserProviderService:
     - get_user_api_key(provider_name)     # Decrypt user's API keys
@@ -54,6 +59,7 @@ class UserProviderService:
 ```
 
 ### **4. Transcription Routes** (`api/routes/transcription_saas.py`)
+
 ```python
 @dual_auth_required                    # JWT OR API key
 @require_user_provider_config('deepgram')  # Must have provider configured
@@ -65,6 +71,7 @@ class UserProviderService:
 ```
 
 ### **5. Authentication Routes** (`api/routes/auth.py`)
+
 ```python
 @jwt_required_only    # JWT only (no API keys)
 
@@ -81,16 +88,19 @@ class UserProviderService:
 ## 🔒 **Security & SaaS Enforcement**
 
 ### **✅ SaaS Model Enforced**
+
 - **NO fallback** alle chiavi di sistema
 - **Utenti DEVONO** configurare le proprie chiavi API
 - **Errori chiari** se chiavi mancanti
 
 ### **🔐 Encryption & Storage**
+
 - API keys crittografate con **AES-256**
 - **Preview** delle chiavi per display (sk-****1234)
 - **Salt-based** key derivation
 
 ### **📊 Usage Tracking**
+
 - **Per-provider** usage statistics
 - **Monthly** limits per plan
 - **Billing-ready** cost tracking
@@ -100,6 +110,7 @@ class UserProviderService:
 ## 🚀 **Usage Examples**
 
 ### **Frontend Web (JWT)**
+
 ```javascript
 // 1. Login
 const loginResponse = await fetch('/auth/login', {
@@ -118,6 +129,7 @@ const transcribeResponse = await fetch('/transcriptions/deepgram', {
 ```
 
 ### **Make.com / API Integration**
+
 ```javascript
 // Use API key directly
 const transcribeResponse = await fetch('/transcriptions/deepgram', {
@@ -131,7 +143,7 @@ const transcribeResponse = await fetch('/transcriptions/deepgram', {
 
 ## 📁 **File Structure**
 
-```
+```graph
 ├── models/
 │   ├── auth.py              # User, ApiKey models
 │   └── provider.py          # Provider, UserProviderConfig models
@@ -156,26 +168,31 @@ const transcribeResponse = await fetch('/transcriptions/deepgram', {
 ## 🎯 **Key Features Implemented**
 
 ### ✅ **Dual Authentication**
+
 - JWT per frontend web
 - API keys per integrazioni esterne
 - Middleware intelligente per routing
 
 ### ✅ **SaaS Model Strict**
+
 - Nessun fallback a chiavi di sistema
 - Utenti pagano per il proprio utilizzo
 - Validazione e enforcement completi
 
 ### ✅ **Provider Management**
+
 - Configurazione sicura delle chiavi API
-- Crittografia AES-256 
+- Crittografia AES-256
 - Test e validazione delle configurazioni
 
 ### ✅ **Usage Tracking**
+
 - Statistiche per provider
 - Limiti per piano utente
 - Tracking costi per fatturazione
 
 ### ✅ **Production Ready**
+
 - Logging strutturato
 - Error handling completo
 - Database models ottimizzati

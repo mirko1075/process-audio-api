@@ -1,5 +1,6 @@
 """Video processing client for URL and file-based video transcription."""
 
+import math
 import os
 import tempfile
 import logging
@@ -142,6 +143,32 @@ class VideoProcessor:
                     except Exception as e:
                         logger.warning(f"Failed to cleanup file: {e}")
     
+    def _is_valid_url(self, url: str) -> bool:
+        """Validate if URL is supported for video processing.
+        
+        Args:
+            url: URL to validate
+            
+        Returns:
+            True if URL is valid and supported, False otherwise
+        """
+        if not url or not isinstance(url, str):
+            return False
+        
+        # Basic URL format check
+        if not url.startswith(('http://', 'https://')):
+            return False
+        
+        # Check for supported platforms (primarily YouTube)
+        supported_patterns = [
+            'youtube.com/watch',
+            'youtu.be/',
+            'm.youtube.com/watch',
+            'www.youtube.com/watch'
+        ]
+        
+        return any(pattern in url.lower() for pattern in supported_patterns)
+    
     def _download_audio_from_url(self, video_url: str) -> str:
         """Download audio from video URL using yt-dlp.
         
@@ -265,6 +292,22 @@ class VideoProcessor:
                 "metadata_error": str(e)
             }
     
+    def _download_video(self, video_url: str) -> tuple[str, Dict[str, Any]]:
+        """Download video and get metadata - compatibility wrapper.
+        
+        Args:
+            video_url: URL of the video
+            
+        Returns:
+            Tuple of (audio_path, metadata)
+        """
+        # Download audio
+        audio_path = self._download_audio_from_url(video_url)
+        
+        # Get metadata
+        metadata = self._get_video_metadata(video_url)
+        
+        return audio_path, metadata
     def _save_video_data(self, video_data: bytes, filename: str) -> str:
         """Save video data to temporary file.
         
@@ -409,8 +452,8 @@ class VideoProcessor:
         for segment in segments:
             if "avg_logprob" in segment and "end" in segment and "start" in segment:
                 duration = segment["end"] - segment["start"]
-                # Convert log probability to confidence (approximate)
-                confidence = max(0.0, min(1.0, (segment["avg_logprob"] + 1.0)))
+                # Convert log probability to confidence using exponential
+                confidence = max(0.0, min(1.0, math.exp(segment["avg_logprob"])))
                 total_confidence += confidence * duration
                 total_duration += duration
         
@@ -433,7 +476,7 @@ class VideoProcessor:
                 "text": segment.get("text", "").strip(),
             }
             if "avg_logprob" in segment:
-                formatted_segment["confidence"] = max(0.0, min(1.0, (segment["avg_logprob"] + 1.0)))
+                formatted_segment["confidence"] = max(0.0, min(1.0, math.exp(segment["avg_logprob"])))
             formatted_segments.append(formatted_segment)
         
         return formatted_segments
