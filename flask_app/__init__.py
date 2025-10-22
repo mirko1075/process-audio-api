@@ -89,7 +89,8 @@ def register_blueprints(app: Flask) -> None:
     from flask_app.api.translation import bp as translation_bp
     from flask_app.api.postprocessing import bp as postprocessing_bp
     from flask_app.api.utilities import bp as utilities_bp
-    from api.auth import bp as auth_bp  # New authentication endpoints
+    from api.auth import bp as auth_bp  # Authentication endpoints
+    from api.user_config import bp as user_config_bp  # User provider configuration
     
     # Register blueprints with appropriate URL prefixes
     app.register_blueprint(health_bp)
@@ -98,6 +99,7 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(postprocessing_bp)
     app.register_blueprint(utilities_bp, url_prefix='/utilities')
     app.register_blueprint(auth_bp, url_prefix='/auth')  # Auth endpoints
+    app.register_blueprint(user_config_bp)  # User config endpoints (already has /user-config prefix)
 
 
 def register_error_handlers(app: Flask) -> None:

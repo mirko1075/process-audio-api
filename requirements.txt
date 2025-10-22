@@ -6,6 +6,7 @@ Flask-Bcrypt==1.0.1
 Flask-Migrate==4.0.7
 psycopg2-binary==2.9.9
 python-dotenv==1.0.1
+cryptography==43.0.3
 deepgram-sdk==3.10.0
 httpx==0.28.1
 openai==1.61.1

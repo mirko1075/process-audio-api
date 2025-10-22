@@ -237,6 +237,238 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  /user-config/providers:
+    get:
+      summary: Get available AI providers
+      description: Get list of all available AI providers and their models for configuration
+      tags:
+        - User Configuration
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Providers retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  providers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Provider'
+
+  /user-config/provider-configs:
+    get:
+      summary: Get user's provider configurations
+      description: Get current user's API key configurations and usage statistics for all providers
+      tags:
+        - User Configuration
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Configurations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  configurations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserProviderConfig'
+    
+    post:
+      summary: Create/Update provider configuration
+      description: Add or update API key for a specific provider. Users must provide their own API keys for SaaS usage.
+      tags:
+        - User Configuration
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - provider_id
+                - api_key
+              properties:
+                provider_id:
+                  type: integer
+                  description: Provider ID from the available providers list
+                  example: 1
+                api_key:
+                  type: string
+                  description: User's API key for the provider
+                  example: "sk-1234567890abcdef"
+                default_model_id:
+                  type: integer
+                  description: Default model ID for this provider (optional)
+                  example: 3
+      responses:
+        '201':
+          description: Provider configuration created/updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "OpenAI configuration created successfully"
+                  configuration:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      provider:
+                        type: string
+                        example: "OpenAI"
+                      api_key_preview:
+                        type: string
+                        example: "sk-****1234"
+                      default_model:
+                        type: string
+                        example: "Whisper v1"
+        '400':
+          description: Bad request - invalid provider, API key format, etc.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Configuration already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /user-config/provider-configs/{configId}:
+    put:
+      summary: Update provider configuration
+      description: Update specific provider configuration (model preference, API key, etc.)
+      tags:
+        - User Configuration
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: configId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Configuration ID to update
+          example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                api_key:
+                  type: string
+                  description: New API key for the provider
+                  example: "sk-new1234567890abcdef"
+                default_model_id:
+                  type: integer
+                  description: New default model ID
+                  example: 5
+      responses:
+        '200':
+          description: Configuration updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Configuration updated successfully"
+                  configuration:
+                    $ref: '#/components/schemas/UserProviderConfig'
+    
+    delete:
+      summary: Deactivate provider configuration
+      description: Deactivate a provider configuration (soft delete)
+      tags:
+        - User Configuration
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: configId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Configuration ID to deactivate
+          example: 1
+      responses:
+        '200':
+          description: Configuration deactivated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Configuration deactivated successfully"
+
+  /user-config/provider-configs/{configId}/test:
+    post:
+      summary: Test provider configuration
+      description: Test a provider configuration by making a simple API call to verify the API key
+      tags:
+        - User Configuration
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: configId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Configuration ID to test
+          example: 1
+      responses:
+        '200':
+          description: API key test successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "OpenAI API key test successful"
+                  provider:
+                    type: string
+                    example: "OpenAI"
+                  status:
+                    type: string
+                    example: "active"
+
+  /user-config/usage-stats:
+    get:
+      summary: Get usage statistics
+      description: Get user's usage statistics across all configured providers
+      tags:
+        - User Configuration
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Usage statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageStatistics'
   /:
     get:
       summary: Root endpoint
@@ -1296,6 +1528,172 @@ components:
           example: "usr_123_AbCdEf123456789..."
         user:
           $ref: '#/components/schemas/User'
+
+    Provider:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "openai"
+        display_name:
+          type: string
+          example: "OpenAI"
+        description:
+          type: string
+          example: "OpenAI API services for transcription and translation"
+        website_url:
+          type: string
+          example: "https://openai.com"
+        documentation_url:
+          type: string
+          example: "https://platform.openai.com/docs"
+        is_active:
+          type: boolean
+          example: true
+        models:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderModel'
+    
+    ProviderModel:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "whisper-1"
+        display_name:
+          type: string
+          example: "Whisper v1"
+        type:
+          type: string
+          example: "transcription"
+        cost_per_unit:
+          type: number
+          format: float
+          example: 0.006
+        cost_unit:
+          type: string
+          example: "minute"
+        max_file_size_mb:
+          type: integer
+          example: 25
+        supported_formats:
+          type: string
+          description: JSON array of supported file formats
+          example: '["mp3", "wav", "m4a"]'
+        is_active:
+          type: boolean
+          example: true
+    
+    UserProviderConfig:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        provider:
+          $ref: '#/components/schemas/Provider'
+        api_key_preview:
+          type: string
+          description: Masked API key for display
+          example: "sk-****1234"
+        is_active:
+          type: boolean
+          example: true
+        default_model:
+          $ref: '#/components/schemas/ProviderModel'
+        total_requests:
+          type: integer
+          description: Total API requests made with this provider
+          example: 150
+        total_cost_usd:
+          type: number
+          format: float
+          description: Total cost in USD
+          example: 45.67
+        total_audio_minutes:
+          type: number
+          format: float
+          description: Total audio minutes processed
+          example: 125.5
+        total_tokens_processed:
+          type: integer
+          description: Total tokens processed (for text-based services)
+          example: 50000
+        last_used:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last time this configuration was used
+          example: "2023-10-16T19:36:22.951768"
+        created_at:
+          type: string
+          format: date-time
+          example: "2023-10-16T19:35:02.584833"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2023-10-16T19:35:02.584833"
+
+    UsageStatistics:
+      type: object
+      properties:
+        total_requests:
+          type: integer
+          description: Total requests across all providers
+          example: 500
+        total_cost_usd:
+          type: number
+          format: float
+          description: Total cost across all providers
+          example: 125.50
+        total_audio_minutes:
+          type: number
+          format: float
+          description: Total audio minutes processed
+          example: 300.5
+        total_tokens_processed:
+          type: integer
+          description: Total tokens processed across all providers
+          example: 100000
+        providers_configured:
+          type: integer
+          description: Number of providers configured
+          example: 3
+        by_provider:
+          type: array
+          description: Usage breakdown by provider
+          items:
+            type: object
+            properties:
+              provider:
+                type: string
+                example: "OpenAI"
+              requests:
+                type: integer
+                example: 200
+              cost_usd:
+                type: number
+                format: float
+                example: 60.25
+              audio_minutes:
+                type: number
+                format: float
+                example: 120.5
+              tokens_processed:
+                type: integer
+                example: 40000
+              last_used:
+                type: string
+                format: date-time
+                nullable: true
+                example: "2023-10-16T19:36:22.951768"
     TranscriptionResponse:
       type: object
       properties:
@@ -1594,6 +1992,10 @@ components:
 tags:
   - name: Health
     description: Health check endpoints
+  - name: Authentication
+    description: User authentication and API key management
+  - name: User Configuration
+    description: Provider configuration and API key management for SaaS
   - name: Transcription
     description: Audio transcription services
   - name: Translation

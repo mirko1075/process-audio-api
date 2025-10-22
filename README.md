@@ -656,7 +656,62 @@ curl -X POST https://your-api.com/transcriptions/video \
 
 ## 🔧 Troubleshooting
 
-See `TROUBLESHOOTING.md` for common issues and solutions.
+### **YouTube Video Download Issues (HTTP 403 Forbidden)**
+
+If you encounter `HTTP Error 403: Forbidden` when transcribing YouTube videos:
+
+**Common Causes:**
+- YouTube's anti-bot measures blocking automated downloads
+- Video has restricted access or geographic limitations
+- yt-dlp needs updating to handle new YouTube protections
+- Video requires login or is age-restricted
+
+**Solutions:**
+
+1. **Update yt-dlp** (most common fix):
+   ```bash
+   # Run the update script
+   ./scripts/update_ytdlp.sh
+   
+   # Or manually update
+   pip install --upgrade yt-dlp
+   ```
+
+2. **Try alternative approaches**:
+   ```bash
+   # Test different video URLs
+   curl -X POST http://localhost:5000/transcriptions/video \
+     -H "x-api-key: your-key" \
+     -H "Content-Type: application/json" \
+     -d '{"video_url": "https://www.youtube.com/watch?v=DIFFERENT_VIDEO_ID"}'
+   
+   # Upload video file directly instead
+   curl -X POST http://localhost:5000/transcriptions/video \
+     -H "x-api-key: your-key" \
+     -F "video=@your-video.mp4"
+   ```
+
+3. **Check video accessibility**:
+   - Ensure video is publicly accessible
+   - Try the video URL in a browser
+   - Check for geographic restrictions
+   - Verify video doesn't require login
+
+4. **Enhanced error handling**: The API now provides clearer error messages for different failure scenarios.
+
+### **Database Connection Issues**
+
+If you see `could not translate host name "db"`:
+
+```bash
+# For development, start PostgreSQL with Docker
+docker-compose up -d db
+
+# Or use SQLite for local testing
+python scripts/init_providers_minimal.py
+```
+
+See `TROUBLESHOOTING.md` for more common issues and solutions.
 
 ## 🤝 Contributing
 

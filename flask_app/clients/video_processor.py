@@ -43,27 +43,42 @@ class VideoProcessor:
         try:
             logger.info(f"Starting video URL processing: {video_url}")
             
+            # Try to get metadata first (lighter operation)
+            metadata = self._get_video_metadata(video_url)
+            if metadata.get('metadata_error'):
+                logger.warning(f"Metadata extraction had issues: {metadata['metadata_error']}")
+            
             # Download audio from video URL
             audio_file = self._download_audio_from_url(video_url)
-            
-            # Get video metadata
-            metadata = self._get_video_metadata(video_url)
             
             # Transcribe audio
             result = self._transcribe_audio_file(audio_file, language, model_size)
             
-            # Add video metadata to result
+            # Add metadata to result
             result.update({
                 "source": "video_url",
                 "video_url": video_url,
-                "video_title": metadata.get("title", "Unknown"),
-                "video_duration": metadata.get("duration", 0),
-                "video_uploader": metadata.get("uploader", "Unknown")
+                "metadata": metadata,
+                "video_duration": metadata.get('duration', result.get('duration_seconds', 0))
             })
             
             logger.info(f"Video URL processing completed: {len(result['transcript'])} characters")
             return result
             
+        except TranscriptionError as e:
+            # Add helpful suggestions for common YouTube issues
+            error_msg = str(e)
+            if "Video download blocked by YouTube" in error_msg:
+                enhanced_msg = f"{error_msg}\n\n🔧 Troubleshooting steps:\n"
+                enhanced_msg += "1. Update yt-dlp: ./scripts/update_ytdlp.sh\n"
+                enhanced_msg += "2. Try a different video URL\n"
+                enhanced_msg += "3. Upload the video file directly instead\n"
+                enhanced_msg += "4. Check if video is publicly accessible\n\n"
+                enhanced_msg += "📁 Alternative: Use file upload endpoint:\n"
+                enhanced_msg += "POST /transcriptions/video with 'video' file field"
+                raise TranscriptionError(enhanced_msg)
+            else:
+                raise
         except Exception as exc:
             logger.error(f"Video URL processing failed: {exc}")
             raise TranscriptionError(f"Video processing failed: {str(exc)}") from exc
@@ -145,6 +160,26 @@ class VideoProcessor:
             'outtmpl': output_path,
             'quiet': True,
             'no_warnings': True,
+            # Add more robust options for YouTube
+            'extractaudio': True,
+            'audioformat': 'mp3',
+            'audioquality': '192',
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'headers': {
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            },
+            'extractor_retries': 3,
+            'fragment_retries': 3,
+            'retry_sleep_functions': {
+                'http': lambda n: min(4 ** n, 60),
+                'fragment': lambda n: min(4 ** n, 60),
+                'extractor': lambda n: min(4 ** n, 60),
+            },
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
@@ -165,7 +200,20 @@ class VideoProcessor:
             return audio_file
             
         except yt_dlp.DownloadError as e:
-            raise TranscriptionError(f"Failed to download video: {str(e)}")
+            error_msg = str(e)
+            if "403" in error_msg or "Forbidden" in error_msg:
+                raise TranscriptionError(
+                    "Video download blocked by YouTube. This can happen due to:\n"
+                    "1. Video has restricted access\n"
+                    "2. Geographic restrictions\n" 
+                    "3. YouTube's anti-bot measures\n"
+                    "4. Video requires login\n\n"
+                    "Try: Updating yt-dlp, using a different video, or uploading the video file directly."
+                )
+            elif "404" in error_msg or "not found" in error_msg.lower():
+                raise TranscriptionError("Video not found. Please check the URL is correct and the video is publicly accessible.")
+            else:
+                raise TranscriptionError(f"Failed to download video: {str(e)}")
         except Exception as e:
             raise TranscriptionError(f"Unexpected error during download: {str(e)}")
     
@@ -181,6 +229,19 @@ class VideoProcessor:
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'headers': {
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            },
+            'extractor_retries': 2,
+            'retry_sleep_functions': {
+                'extractor': lambda n: min(2 ** n, 30),
+            },
         }
         
         try:
@@ -195,7 +256,14 @@ class VideoProcessor:
                 }
         except Exception as e:
             logger.warning(f"Failed to get video metadata: {e}")
-            return {}
+            return {
+                "title": "Unknown",
+                "duration": 0,
+                "uploader": "Unknown",
+                "view_count": 0,
+                "upload_date": "Unknown",
+                "metadata_error": str(e)
+            }
     
     def _save_video_data(self, video_data: bytes, filename: str) -> str:
         """Save video data to temporary file.
