@@ -59,6 +59,19 @@ def init_database(force_drop=False):
         from models import db
         from models.user import User
         
+        # Safety checks
+        if not force_unsafe:
+            if not is_safe_environment():
+                print("🚨 SAFETY CHECK FAILED!")
+                print("   This appears to be a production environment.")
+                print("   Set FLASK_ENV=development or APP_ENV=development to proceed.")
+                print("   Or use --force-unsafe flag (NOT RECOMMENDED).")
+                return False
+            
+            if not confirm_destructive_action():
+                print("❌ Operation cancelled by user.")
+                return False
+        
         # Create app with database support
         app = create_app()
         
@@ -170,7 +183,40 @@ def create_test_user():
     except Exception as e:
         print(f"❌ Error creating test user: {str(e)}")
 
+def create_tables_only():
+    """Create database tables without dropping existing data (safe operation)."""
+    try:
+        from flask_app import create_app
+        from models import db
+        
+        app = create_app()
+        
+        with app.app_context():
+            print("🗄️  Creating database tables (preserving existing data)...")
+            db.create_all()
+            
+            print("✅ Database tables created successfully!")
+            print("💡 Note: Existing data was preserved.")
+            
+    except Exception as e:
+        print(f"❌ Error creating tables: {str(e)}")
+        return False
+    
+    return True
+
 if __name__ == '__main__':
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Initialize database with safety checks')
+    parser.add_argument('--test-user', action='store_true', 
+                       help='Create test user only (safe operation)')
+    parser.add_argument('--force-unsafe', action='store_true',
+                       help='Skip all safety checks (DANGEROUS - use only for development)')
+    parser.add_argument('--create-only', action='store_true',
+                       help='Create tables without dropping (safe operation)')
+    
+    args = parser.parse_args()
+    
     logging.basicConfig(level=logging.INFO)
     
     # Parse command line arguments

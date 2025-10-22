@@ -138,7 +138,6 @@ if "403" in error_msg or "Forbidden" in error_msg:
 ## 📊 **Monitoraggio**
 
 Il sistema ora logga:
-
 - **Successi**: Conferma download e transcription
 - **Errori Specifici**: Tipo di errore e suggerimenti
 - **Metadata**: Informazioni video quando disponibili

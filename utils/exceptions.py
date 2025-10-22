@@ -19,3 +19,7 @@ class InvalidRequestError(ServiceError):
 
 class ProcessingError(ServiceError):
     """Raised when video/audio processing fails."""
+
+
+class ConfigurationError(ServiceError):
+    """Raised when user configuration is missing or invalid - SaaS specific."""

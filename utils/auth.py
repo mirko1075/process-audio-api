@@ -19,6 +19,7 @@ def require_auth(allow_api_key=True, allow_jwt=True):
         def decorated_function(*args, **kwargs):
             user = None
             auth_method = None
+            auth_error = None
             
             # Try JWT first (Bearer token)
             if allow_jwt:
@@ -34,8 +35,18 @@ def require_auth(allow_api_key=True, allow_jwt=True):
                         if user and user.is_active:
                             auth_method = 'jwt'
                             logger.info(f"JWT auth successful for user {user.id}")
+                        elif user and not user.is_active:
+                            auth_error = {'reason': 'user_inactive', 'message': 'User account is inactive'}
                     except Exception as e:
                         logger.warning(f"JWT verification failed: {str(e)}")
+                        # Distinguish between different JWT errors
+                        error_str = str(e).lower()
+                        if 'expired' in error_str or 'signature has expired' in error_str:
+                            auth_error = {'reason': 'token_expired', 'message': 'JWT token has expired'}
+                        elif 'invalid' in error_str or 'signature' in error_str:
+                            auth_error = {'reason': 'token_invalid', 'message': 'JWT token is invalid'}
+                        else:
+                            auth_error = {'reason': 'token_error', 'message': 'JWT token verification failed'}
             
             # Try API Key if JWT failed
             if not user and allow_api_key:
@@ -64,9 +75,24 @@ def require_auth(allow_api_key=True, allow_jwt=True):
                             logger.info("Legacy API key authentication")
                         else:
                             logger.warning(f"Invalid API key attempted")
+                            auth_error = {'reason': 'api_key_invalid', 'message': 'Invalid API key'}
+                elif allow_api_key and not allow_jwt:
+                    # API key is required but missing
+                    auth_error = {'reason': 'api_key_missing', 'message': 'API key is required'}
             
+            # Handle authentication failure with specific error
             if not user:
-                return jsonify({'error': 'Authentication required'}), 401
+                if not auth_error:
+                    # No credentials provided at all
+                    if request.headers.get('Authorization') or request.headers.get('x-api-key'):
+                        auth_error = {'reason': 'auth_failed', 'message': 'Authentication failed'}
+                    else:
+                        auth_error = {'reason': 'credentials_missing', 'message': 'Authentication credentials required'}
+                
+                return jsonify({
+                    'error': 'Authentication required',
+                    'details': auth_error
+                }), 401
             
             # Set user context for the request
             g.current_user = user

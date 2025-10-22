@@ -1,13 +1,13 @@
-"""Deepgram API client for transcription services."""
+"""Deepgram API client for transcription services with user API keys."""
 import logging
-from typing import Dict, Any, List
-from functools import lru_cache
+from typing import Dict, Any, List, Optional
 
 from deepgram import (
     DeepgramClient as DGClient, 
     PrerecordedOptions
 )
-from utils.config import get_app_config
+from functools import lru_cache
+
 from utils.exceptions import TranscriptionError
 
 
@@ -15,16 +15,24 @@ logger = logging.getLogger(__name__)
 
 
 class DeepgramClient:
-    """Client for Deepgram Nova-2 transcription API."""
+    """Client for Deepgram Nova-2 transcription API using user's API key."""
     
-    def __init__(self):
-        config = get_app_config()
-        if not config.deepgram.api_key:
-            raise TranscriptionError("Deepgram API key not configured")
+    def __init__(self, api_key: str):
+        """
+        Initialize Deepgram client with user's API key.
+        
+        Args:
+            api_key: User's Deepgram API key
+            
+        Raises:
+            TranscriptionError: If API key is invalid or client initialization fails
+        """
+        if not api_key or not api_key.strip():
+            raise TranscriptionError("Deepgram API key is required")
             
         try:
-            self._client = DGClient(config.deepgram.api_key)
-            logger.info("Deepgram client initialized successfully")
+            self._client = DGClient(api_key.strip())
+            logger.info("Deepgram client initialized with user API key")
         except Exception as e:
             logger.error(f"Failed to initialize Deepgram client: {e}")
             raise TranscriptionError(f"Deepgram client initialization failed: {str(e)}")

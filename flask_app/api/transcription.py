@@ -68,6 +68,15 @@ def deepgram_transcription():
         # Merge processing info with result
         final_result = {**result, "processing_info": processing_info}
         
+        # Log usage for billing/analytics
+        log_usage(
+            service='deepgram',
+            endpoint='transcription',
+            audio_duration=result.get('audio_duration_seconds'),
+            characters_processed=len(result.get('transcript', '')),
+            cost_usd=None  # Could be calculated based on duration/characters
+        )
+        
         logger.info(f"Deepgram transcription completed successfully (speakers: {result.get('diarization', {}).get('speakers_detected', 'N/A')})")
         return jsonify(final_result)
         
@@ -116,6 +125,15 @@ def whisper_transcription():
         if result.get('processing_method') == 'chunked':
             logger.info(f"Processed {result.get('total_chunks')} chunks")
         
+        # Log usage for billing/analytics
+        log_usage(
+            service='whisper',
+            endpoint='transcription',
+            audio_duration=result.get('audio_duration_seconds'),
+            characters_processed=len(result.get('transcript', '')),
+            cost_usd=None  # Could be calculated based on duration
+        )
+        
         return jsonify(result)
         
     except TranscriptionError as e:
@@ -154,6 +172,15 @@ def assemblyai_transcription():
         # Use service to handle transcription
         service = AssemblyAIService()
         result = service.transcribe(audio_file, language=language)
+        
+        # Log usage for billing/analytics
+        log_usage(
+            service='assemblyai',
+            endpoint='transcription',
+            audio_duration=result.get('audio_duration_seconds'),
+            characters_processed=len(result.get('transcript', '')),
+            cost_usd=None  # Could be calculated based on duration
+        )
         
         logger.info("AssemblyAI transcription completed successfully")
         return jsonify(result)
@@ -251,6 +278,14 @@ def transcribe_and_translate():
             'translated_text': translated_text
         }
         
+        # Log usage for billing/analytics
+        log_usage(
+            service='combined',
+            endpoint='transcribe-and-translate',
+            characters_processed=len(transcript) + len(translated_text or ''),
+            cost_usd=None  # Could be calculated based on transcription + translation costs
+        )
+        
         logger.info("Combined transcribe and translate completed successfully")
         return jsonify(result)
         
@@ -309,6 +344,15 @@ def video_transcription():
             
         else:
             raise BadRequest('Either video_url (JSON) or video file (multipart) is required')
+        
+        # Log usage for billing/analytics
+        log_usage(
+            service='video',
+            endpoint='video-transcription',
+            audio_duration=result.get('video_duration'),
+            characters_processed=len(result.get('transcript', '')),
+            cost_usd=None  # Could be calculated based on video duration
+        )
         
         logger.info("Video transcription completed successfully")
         return jsonify(result)

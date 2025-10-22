@@ -1,14 +1,13 @@
-"""OpenAI API client for Whisper transcription and GPT translation."""
+"""OpenAI API client for Whisper transcription and GPT translation with user API keys."""
 import logging
 import os
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from functools import lru_cache
 
 import openai
 from pydub import AudioSegment
 import tiktoken
 
-from utils.config import get_app_config
 from utils.exceptions import TranscriptionError, TranslationError
 
 
@@ -16,24 +15,37 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAIClient:
-    """Client for OpenAI Whisper and GPT APIs."""
+    """Client for OpenAI Whisper and GPT APIs using user's API key."""
     
-    def __init__(self):
-        config = get_app_config()
-        if not config.openai.api_key:
-            raise TranscriptionError("OpenAI API key not configured")
+    def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
+        """
+        Initialize OpenAI client with user's API key.
+        
+        Args:
+            api_key: User's OpenAI API key
+            model: GPT model to use for translation
             
-        self._client = openai.OpenAI(api_key=config.openai.api_key)
-        self._model = config.openai.model
-        
-        # Initialize tokenizer for text chunking
+        Raises:
+            TranscriptionError: If API key is invalid or client initialization fails
+        """
+        if not api_key or not api_key.strip():
+            raise TranscriptionError("OpenAI API key is required")
+            
         try:
-            self._tokenizer = tiktoken.encoding_for_model(self._model)
-        except KeyError:
-            self._tokenizer = tiktoken.get_encoding("cl100k_base")
-            logger.warning(f"Using fallback tokenizer for model {self._model}")
-        
-        logger.info(f"OpenAI client initialized with model {self._model}")
+            self._client = openai.OpenAI(api_key=api_key.strip())
+            self._model = model
+            
+            # Initialize tokenizer for text chunking
+            try:
+                self._tokenizer = tiktoken.encoding_for_model(self._model)
+            except KeyError:
+                self._tokenizer = tiktoken.get_encoding("cl100k_base")
+                logger.warning(f"Using fallback tokenizer for model {self._model}")
+            
+            logger.info(f"OpenAI client initialized with user API key, model {self._model}")
+        except Exception as e:
+            logger.error(f"Failed to initialize OpenAI client: {e}")
+            raise TranscriptionError(f"OpenAI client initialization failed: {str(e)}")
     
     def transcribe_with_chunking(self, audio_path: str, language: str = 'en') -> Dict[str, Any]:
         """Transcribe audio with automatic chunking for large files.

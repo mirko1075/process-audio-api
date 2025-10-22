@@ -12,23 +12,19 @@ class TestDeepgramDiarization:
     
     def setup_method(self):
         """Set up test fixtures."""
-        # Mock the config and DGClient to avoid requiring real API keys
-        with patch('flask_app.clients.deepgram.get_app_config') as mock_config:
-            mock_config.return_value.deepgram.api_key = "test-api-key"
-            with patch('flask_app.clients.deepgram.DGClient'):
-                self.client = DeepgramClient()
+        # Mock the DGClient to avoid requiring real API keys
+        with patch('flask_app.clients.deepgram.DGClient'):
+            self.client = DeepgramClient(api_key="test-api-key")
     
-    @patch('flask_app.clients.deepgram.get_app_config')
     @patch('flask_app.clients.deepgram.DGClient')
-    def test_transcribe_without_diarization(self, mock_dg_client, mock_config):
+    def test_transcribe_without_diarization(self, mock_dg_client):
         """Test transcription without diarization (default behavior)."""
         # Setup mocks
-        mock_config.return_value.deepgram.api_key = "test-api-key"
         mock_client_instance = Mock()
         mock_dg_client.return_value = mock_client_instance
         
         # Create new client instance with mocks
-        client = DeepgramClient()
+        client = DeepgramClient(api_key="test-api-key")
         client._client = mock_client_instance
         
         mock_response = self._create_mock_response(include_speakers=False)
@@ -43,17 +39,16 @@ class TestDeepgramDiarization:
         assert "diarization" not in result
         assert result["service"] == "deepgram"
     
-    @patch('flask_app.clients.deepgram.get_app_config')
     @patch('flask_app.clients.deepgram.DGClient')
-    def test_transcribe_with_diarization(self, mock_dg_client, mock_config):
+    def test_transcribe_with_diarization(self, mock_dg_client):
         """Test transcription with diarization enabled."""
         # Setup mocks
-        mock_config.return_value.deepgram.api_key = "test-api-key"
         mock_client_instance = Mock()
         mock_dg_client.return_value = mock_client_instance
         
         # Create new client instance with mocks
-        client = DeepgramClient()
+        # Create new client instance with mocks
+        client = DeepgramClient(api_key="test-api-key")
         client._client = mock_client_instance
         
         mock_response = self._create_mock_response(include_speakers=True)
@@ -80,17 +75,15 @@ class TestDeepgramDiarization:
         assert segments[1]["speaker"] == "Speaker_1"
         assert segments[1]["text"] == "is a test"
     
-    @patch('flask_app.clients.deepgram.get_app_config')
     @patch('flask_app.clients.deepgram.DGClient')
-    def test_transcribe_with_paragraphs(self, mock_dg_client, mock_config):
+    def test_transcribe_with_paragraphs(self, mock_dg_client):
         """Test transcription with paragraph detection."""
         # Setup mocks
-        mock_config.return_value.deepgram.api_key = "test-api-key"
         mock_client_instance = Mock()
         mock_dg_client.return_value = mock_client_instance
         
         # Create new client instance with mocks
-        client = DeepgramClient()
+        client = DeepgramClient(api_key="test-api-key")
         client._client = mock_client_instance
         
         mock_response = self._create_mock_response(include_paragraphs=True)
@@ -106,16 +99,14 @@ class TestDeepgramDiarization:
         assert paragraphs[0]["text"] == "Hello, this"
         assert paragraphs[1]["text"] == "is a test."
     
-    @patch('flask_app.clients.deepgram.get_app_config')
     @patch('flask_app.clients.deepgram.DGClient')
-    def test_process_diarization_with_multiple_speakers(self, mock_dg_client, mock_config):
+    def test_process_diarization_with_multiple_speakers(self, mock_dg_client):
         """Test diarization processing with multiple speakers."""
         # Setup mocks
-        mock_config.return_value.deepgram.api_key = "test-api-key"
         mock_dg_client.return_value = Mock()
         
         # Create client with mocks
-        client = DeepgramClient()
+        client = DeepgramClient(api_key="test-api-key")
         
         # Mock word data with speaker information
         words = [
@@ -142,32 +133,28 @@ class TestDeepgramDiarization:
         assert speaker_0["average_confidence"] == pytest.approx(0.935, rel=1e-3)
         assert speaker_1["average_confidence"] == pytest.approx(0.903, rel=1e-3)
     
-    @patch('flask_app.clients.deepgram.get_app_config')
     @patch('flask_app.clients.deepgram.DGClient')
-    def test_process_diarization_empty_words(self, mock_dg_client, mock_config):
+    def test_process_diarization_empty_words(self, mock_dg_client):
         """Test diarization processing with no word data."""
         # Setup mocks
-        mock_config.return_value.deepgram.api_key = "test-api-key"
         mock_dg_client.return_value = Mock()
         
         # Create client with mocks
-        client = DeepgramClient()
+        client = DeepgramClient(api_key="test-api-key")
         
         result = client._process_diarization({}, [])
         
         assert "error" in result
         assert "No word-level data available" in result["error"]
     
-    @patch('flask_app.clients.deepgram.get_app_config')
     @patch('flask_app.clients.deepgram.DGClient')
-    def test_process_paragraphs_valid_data(self, mock_dg_client, mock_config):
+    def test_process_paragraphs_valid_data(self, mock_dg_client):
         """Test paragraph processing with valid data."""
         # Setup mocks
-        mock_config.return_value.deepgram.api_key = "test-api-key"
         mock_dg_client.return_value = Mock()
         
         # Create client with mocks
-        client = DeepgramClient()
+        client = DeepgramClient(api_key="test-api-key")
         
         # Mock paragraph data
         mock_paragraphs = {
@@ -186,16 +173,14 @@ class TestDeepgramDiarization:
         assert result[1]["text"] == "Second paragraph."
         assert result[1]["duration"] == 1.9
     
-    @patch('flask_app.clients.deepgram.get_app_config')
     @patch('flask_app.clients.deepgram.DGClient')
-    def test_process_paragraphs_empty_data(self, mock_dg_client, mock_config):
+    def test_process_paragraphs_empty_data(self, mock_dg_client):
         """Test paragraph processing with empty data."""
         # Setup mocks
-        mock_config.return_value.deepgram.api_key = "test-api-key"
         mock_dg_client.return_value = Mock()
         
         # Create client with mocks
-        client = DeepgramClient()
+        client = DeepgramClient(api_key="test-api-key")
         
         result = client._process_paragraphs(None)
         assert result == []

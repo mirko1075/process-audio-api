@@ -8,6 +8,7 @@ import io
 def client(monkeypatch):
     """Create test client with mock environment variables."""
     monkeypatch.setenv("API_KEY", "test-api-key")
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key-for-testing")
     monkeypatch.setenv("DEEPGRAM_API_KEY", "test-deepgram-key")
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
     monkeypatch.setenv("ASSEMBLYAI_API_KEY", "test-assemblyai-key")
