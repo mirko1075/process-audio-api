@@ -115,7 +115,7 @@ class TestVideoProcessor:
         ]
         
         for url in valid_urls:
-            assert self.processor._is_valid_url(url) == True
+            assert self.processor._is_valid_url(url)
     
     def test_validate_url_invalid(self):
         """Test URL validation for invalid URLs."""
@@ -127,7 +127,7 @@ class TestVideoProcessor:
         ]
         
         for url in invalid_urls:
-            assert self.processor._is_valid_url(url) == False
+            assert not self.processor._is_valid_url(url)
     
     @patch('flask_app.clients.video_processor.yt_dlp.YoutubeDL')
     def test_download_video_success(self, mock_ytdl_class):
