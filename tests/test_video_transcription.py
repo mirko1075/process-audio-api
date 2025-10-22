@@ -85,7 +85,7 @@ class TestVideoTranscriptionService:
 
     def test_transcribe_from_url_invalid_url_validation(self):
         """Test URL transcription with invalid URL gets caught by validation."""
-        with pytest.raises(TranscriptionError, match="Invalid or unsupported video URL"):
+        with pytest.raises(TranscriptionError, match="Video not found. Please check the URL is correct and the video is publicly accessible."):
             self.service.transcribe_from_url(
                 "https://example.com/not-a-video",
                 model_size="tiny"
