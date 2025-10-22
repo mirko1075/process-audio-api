@@ -6,7 +6,7 @@ A production-ready Flask backend for transcribing, translating and analyzing med
 
 This Flask application follows modern best practices with a modular architecture:
 
-```Graph
+```text
 flask_app/
   __init__.py                 # Application factory
   api/                        # Flask blueprints (routes + business logic)
@@ -163,8 +163,7 @@ git push origin main
 1. **Crea un nuovo Web Service** su [render.com](https://render.com)
 2. **Connetti il repository GitHub**: `mirko1075/process-audio-api`
 3. **Configura il servizio**:
-
-   ```text
+   ```
    Name: medical-transcription-api
    Environment: Docker
    Branch: main
@@ -181,7 +180,6 @@ FLASK_APP=app.py
 FLASK_ENV=production
 PORT=5000
 
-# Authentication
 # 🔐 Authentication System
 
 This API supports **dual authentication modes** to accommodate both SaaS users and automated integrations:
@@ -217,6 +215,7 @@ curl -X POST https://your-api.com/transcriptions/deepgram \
 ```
 
 ### **2. API Key Authentication (For Integrations)**
+
 For Make.com, Zapier, scripts, and automated workflows:
 
 ```bash
@@ -227,11 +226,13 @@ curl -X POST https://your-api.com/transcriptions/deepgram \
 ```
 
 ### **3. Legacy Support**
+
 Existing integrations continue to work with the original static API key.
 
 ## **User Management**
 
 ### **Registration & Login**
+
 ```bash
 # Register
 POST /auth/register
@@ -253,6 +254,7 @@ POST /auth/login
 ```
 
 ### **API Key Management**
+
 ```bash
 # Get profile and API keys
 GET /auth/profile
@@ -273,6 +275,7 @@ Authorization: Bearer <jwt-token>
 ## **Database Setup**
 
 ### **Development (Docker)**
+
 ```bash
 # Start PostgreSQL
 docker compose up -d db
@@ -287,6 +290,7 @@ python scripts/init_db.py
 ```
 
 ### **Production (Render/Railway)**
+
 Set environment variables:
 ```env
 DATABASE_URL=postgresql://user:pass@host:5432/dbname
@@ -317,22 +321,24 @@ API_KEY=your-legacy-api-key  # for backward compatibility
 API_KEY=your-secure-api-key-here
 
 # AI Service API Keys (Obtain from respective platforms)
+
 DEEPGRAM_API_KEY=your_deepgram_key_here
 OPENAI_API_KEY=your_openai_key_here
 ASSEMBLYAI_API_KEY=your_assemblyai_key_here
 DEEPSEEK_API_KEY=your_deepseek_key_here
 
 # Google Cloud (Base64 del file credentials JSON)
+
 GOOGLE_APPLICATION_CREDENTIALS_JSON=base64_encoded_json_here
 
 # Optional Configuration
+
 GOOGLE_CLOUD_PROJECT_ID=your_project_id
 ALLOWED_ORIGINS=https://yourdomain.com,https://anotherdomain.com
 LOG_LEVEL=INFO
 ```
 
 #### **4. Configurazione Avanzata**
-
 ```bash
 # Instance Type: Starter (512MB RAM) o Standard (2GB RAM)
 # Auto-Deploy: Yes (for automatic CI/CD)
@@ -342,7 +348,6 @@ LOG_LEVEL=INFO
 #### **5. Build Commands**
 
 Render utilizzerà automaticamente il `Dockerfile` presente nel repository:
-
 ```dockerfile
 # Il Dockerfile gestisce automaticamente:
 # - Installazione dipendenze da requirements.txt
@@ -376,15 +381,13 @@ curl -X POST https://medical-transcription-api.onrender.com/transcriptions/deepg
 
 #### **🔧 Troubleshooting Render**
 
-**Errore 1: ModuleNotFoundError: No module named 'flask_cors'**:
-
+**Errore 1: ModuleNotFoundError: No module named 'flask_cors'**
 ```bash
 # Soluzione: Assicurati che Flask-CORS sia nel requirements.txt
 Flask-CORS==5.0.0
 ```
 
-**Errore 2: Port binding issues**:
-
+**Errore 2: Port binding issues**
 ```bash
 # Soluzione: Render usa la variabile PORT dinamica
 # Il Dockerfile è già configurato per usare $PORT
@@ -393,8 +396,7 @@ Flask-CORS==5.0.0
 # Start Command: (lascia vuoto, usa il CMD del Dockerfile)
 ```
 
-**Errore 3: Environment variables non trovate**:
-
+**Errore 3: Environment variables non trovate**
 ```bash
 # Soluzione: Nel dashboard Render, verifica di aver aggiunto:
 FLASK_APP=app.py
@@ -405,8 +407,7 @@ OPENAI_API_KEY=your-key
 # ... altre variabili necessarie
 ```
 
-**Errore 4: Build timeout o out of memory**:
-
+**Errore 4: Build timeout o out of memory**
 ```bash
 # Soluzione: Aggiungi .dockerignore per escludere file non necessari:
 echo "__pycache__" >> .dockerignore
@@ -416,8 +417,7 @@ echo "node_modules" >> .dockerignore
 echo ".venv" >> .dockerignore
 ```
 
-**Errore 5: Gunicorn workers crash**:
-
+**Errore 5: Gunicorn workers crash**
 ```bash
 # Soluzione: Il Dockerfile usa 4 workers, riduci a 2 per Starter plan
 # Modifica nel Dockerfile: --workers 2
@@ -678,7 +678,62 @@ curl -X POST https://your-api.com/transcriptions/video \
 
 ## 🔧 Troubleshooting
 
-See `TROUBLESHOOTING.md` for common issues and solutions.
+### **YouTube Video Download Issues (HTTP 403 Forbidden)**
+
+If you encounter `HTTP Error 403: Forbidden` when transcribing YouTube videos:
+
+**Common Causes:**
+- YouTube's anti-bot measures blocking automated downloads
+- Video has restricted access or geographic limitations
+- yt-dlp needs updating to handle new YouTube protections
+- Video requires login or is age-restricted
+
+**Solutions:**
+
+1. **Update yt-dlp** (most common fix):
+   ```bash
+   # Run the update script
+   ./scripts/update_ytdlp.sh
+   
+   # Or manually update
+   pip install --upgrade yt-dlp
+   ```
+
+2. **Try alternative approaches**:
+   ```bash
+   # Test different video URLs
+   curl -X POST http://localhost:5000/transcriptions/video \
+     -H "x-api-key: your-key" \
+     -H "Content-Type: application/json" \
+     -d '{"video_url": "https://www.youtube.com/watch?v=DIFFERENT_VIDEO_ID"}'
+   
+   # Upload video file directly instead
+   curl -X POST http://localhost:5000/transcriptions/video \
+     -H "x-api-key: your-key" \
+     -F "video=@your-video.mp4"
+   ```
+
+3. **Check video accessibility**:
+   - Ensure video is publicly accessible
+   - Try the video URL in a browser
+   - Check for geographic restrictions
+   - Verify video doesn't require login
+
+4. **Enhanced error handling**: The API now provides clearer error messages for different failure scenarios.
+
+### **Database Connection Issues**
+
+If you see `could not translate host name "db"`:
+
+```bash
+# For development, start PostgreSQL with Docker
+docker-compose up -d db
+
+# Or use SQLite for local testing
+python scripts/init_providers_minimal.py
+```
+
+See `TROUBLESHOOTING.md` for more common issues and solutions.
 
 ## 🤝 Contributing
 
