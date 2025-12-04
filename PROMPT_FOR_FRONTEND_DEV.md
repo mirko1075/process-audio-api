@@ -18,13 +18,15 @@ Il backend Flask è operativo e testato con i seguenti endpoint:
 
 ## REST API Endpoints
 
-### 1. POST /auth/login - Autenticazione
+### 1. POST /mobile-auth/login - Autenticazione Mobile
 
-**Descrizione:** Autentica un utente e ottiene un token di sessione per il WebSocket.
+**Descrizione:** Autentica un utente mobile e ottiene un token di sessione per il WebSocket.
+
+**Note:** Gli endpoint mobile sono su `/mobile-auth` per non confliggere con gli endpoint web su `/auth`.
 
 **Request:**
 ```http
-POST http://localhost:5000/auth/login
+POST http://localhost:5000/mobile-auth/login
 Content-Type: application/json
 
 {
@@ -57,13 +59,13 @@ Content-Type: application/json
 
 ---
 
-### 2. POST /auth/verify - Verifica Token
+### 2. POST /mobile-auth/verify - Verifica Token
 
 **Descrizione:** Verifica se un token è ancora valido.
 
 **Request:**
 ```http
-POST http://localhost:5000/auth/verify
+POST http://localhost:5000/mobile-auth/verify
 Content-Type: application/json
 
 {
@@ -90,13 +92,13 @@ Content-Type: application/json
 
 ---
 
-### 3. POST /auth/logout - Logout
+### 3. POST /mobile-auth/logout - Logout
 
 **Descrizione:** Invalida un token di sessione.
 
 **Request:**
 ```http
-POST http://localhost:5000/auth/logout
+POST http://localhost:5000/mobile-auth/logout
 Content-Type: application/json
 
 {
@@ -334,7 +336,7 @@ const MeetingMinuteScreen = () => {
 ```typescript
   const handleLogin = async () => {
     try {
-      const response = await fetch(`${API_URL}/auth/login`, {
+      const response = await fetch(`${API_URL}/mobile-auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -510,7 +512,7 @@ const MeetingMinuteScreen = () => {
 
       // Logout dal server
       if (authToken) {
-        await fetch(`${API_URL}/auth/logout`, {
+        await fetch(`${API_URL}/mobile-auth/logout`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ auth_token: authToken })
@@ -657,7 +659,7 @@ const loadToken = async () => {
   const token = await AsyncStorage.getItem('auth_token');
   if (token) {
     // Verifica validità
-    const response = await fetch(`${API_URL}/auth/verify`, {
+    const response = await fetch(`${API_URL}/mobile-auth/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ auth_token: token })

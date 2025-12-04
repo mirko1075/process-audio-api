@@ -6,12 +6,12 @@ import time
 BASE_URL = "http://localhost:5000"
 
 def test_login():
-    """Test dell'endpoint di login."""
+    """Test dell'endpoint di login mobile."""
     print("\n" + "="*50)
-    print("TEST 1: Login")
+    print("TEST 1: Mobile Login")
     print("="*50)
 
-    url = f"{BASE_URL}/auth/login"
+    url = f"{BASE_URL}/mobile-auth/login"
     payload = {
         "username": "test_user",
         "password": "test123"
@@ -37,12 +37,12 @@ def test_login():
 
 
 def test_verify_token(token):
-    """Test dell'endpoint di verifica token."""
+    """Test dell'endpoint di verifica token mobile."""
     print("\n" + "="*50)
-    print("TEST 2: Verify Token")
+    print("TEST 2: Verify Mobile Token")
     print("="*50)
 
-    url = f"{BASE_URL}/auth/verify"
+    url = f"{BASE_URL}/mobile-auth/verify"
     payload = {
         "auth_token": token
     }
@@ -64,10 +64,10 @@ def test_verify_token(token):
 def test_invalid_token():
     """Test con token invalido."""
     print("\n" + "="*50)
-    print("TEST 3: Invalid Token")
+    print("TEST 3: Invalid Mobile Token")
     print("="*50)
 
-    url = f"{BASE_URL}/auth/verify"
+    url = f"{BASE_URL}/mobile-auth/verify"
     payload = {
         "auth_token": "invalid_token_12345"
     }
@@ -87,12 +87,12 @@ def test_invalid_token():
 
 
 def test_logout(token):
-    """Test dell'endpoint di logout."""
+    """Test dell'endpoint di logout mobile."""
     print("\n" + "="*50)
-    print("TEST 4: Logout")
+    print("TEST 4: Mobile Logout")
     print("="*50)
 
-    url = f"{BASE_URL}/auth/logout"
+    url = f"{BASE_URL}/mobile-auth/logout"
     payload = {
         "auth_token": token
     }
