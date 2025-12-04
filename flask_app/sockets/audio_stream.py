@@ -2,7 +2,7 @@
 import logging
 import base64
 import json
-from flask_socketio import emit, disconnect
+from flask_socketio import emit
 from datetime import datetime
 
 from deepgram import (
