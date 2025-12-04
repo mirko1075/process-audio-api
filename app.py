@@ -2,13 +2,16 @@
 
 from flask_app import create_app
 
-# Create Flask application using application factory
-app = create_app()
+# Create Flask application and SocketIO using application factory
+app, socketio = create_app()
 
 if __name__ == '__main__':
     # Development server configuration
-    app.run(
+    # Use socketio.run instead of app.run for WebSocket support
+    socketio.run(
+        app,
         host='0.0.0.0',
         port=5000,
-        debug=True
+        debug=True,
+        allow_unsafe_werkzeug=True  # For development only
     )

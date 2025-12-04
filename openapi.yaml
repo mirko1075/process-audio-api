@@ -40,6 +40,157 @@ paths:
                     type: string
                     example: "AI Medical Transcription Backend"
 
+  /auth/login:
+    post:
+      summary: Mobile app login
+      description: |
+        Authenticate a mobile user and generate a session token for WebSocket streaming.
+        **Note**: In demo mode, any username/password combination is accepted.
+        Session tokens expire after 24 hours.
+      tags:
+        - Mobile Authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+              properties:
+                username:
+                  type: string
+                  description: User identifier
+                  example: "mario_rossi"
+                password:
+                  type: string
+                  description: User password (optional in demo)
+                  example: "demo123"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  auth_token:
+                    type: string
+                    description: Session token for WebSocket authentication
+                    example: "session_XyJenG2Tj7UFLWs2g5FZ4jiHAQgz_C0z6ElME-bzOTY"
+                  user_id:
+                    type: string
+                    description: Normalized user identifier
+                    example: "mario_rossi"
+                  expires_at:
+                    type: string
+                    format: date-time
+                    description: Token expiration timestamp (ISO 8601)
+                    example: "2025-12-05T20:42:34.974864"
+                  message:
+                    type: string
+                    example: "Login successful"
+        '400':
+          description: Bad request - username missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/verify:
+    post:
+      summary: Verify session token
+      description: Check if a session token is valid and not expired
+      tags:
+        - Mobile Authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - auth_token
+              properties:
+                auth_token:
+                  type: string
+                  description: Session token to verify
+                  example: "session_XyJenG2Tj7UFLWs2g5FZ4jiHAQgz_C0z6ElME-bzOTY"
+      responses:
+        '200':
+          description: Token is valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                    example: true
+                  user_id:
+                    type: string
+                    example: "mario_rossi"
+                  username:
+                    type: string
+                    example: "Mario Rossi"
+        '401':
+          description: Token invalid or expired
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Invalid token"
+
+  /auth/logout:
+    post:
+      summary: Logout user
+      description: Invalidate a session token
+      tags:
+        - Mobile Authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - auth_token
+              properties:
+                auth_token:
+                  type: string
+                  description: Session token to invalidate
+                  example: "session_XyJenG2Tj7UFLWs2g5FZ4jiHAQgz_C0z6ElME-bzOTY"
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Logout successful"
+        '401':
+          description: Invalid token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Invalid or expired token"
+
   /health:
     get:
       summary: Health check endpoint
@@ -1074,9 +1225,312 @@ components:
 tags:
   - name: Health
     description: Health check endpoints
+  - name: Mobile Authentication
+    description: Mobile app authentication and session management
+  - name: Mobile Streaming
+    description: Real-time audio streaming and transcription via WebSocket
   - name: Transcription
     description: Audio transcription services
   - name: Translation
     description: Text translation services
   - name: Post-processing
     description: Sentiment analysis and document generation
+  - name: Utilities
+    description: Utility endpoints for audio processing and logging
+
+# WebSocket Endpoint Documentation
+# OpenAPI 3.x does not natively support WebSocket, so this is documented as an extension
+x-websocket-streaming:
+  path: /socket.io/
+  namespace: /audio-stream
+  protocol: Socket.IO
+  description: |
+    Real-time audio streaming endpoint for mobile applications using Socket.IO protocol.
+
+    ## Connection
+    Connect to the WebSocket with authentication:
+
+    **JavaScript/TypeScript (React Native):**
+    ```typescript
+    import io from 'socket.io-client';
+
+    const socket = io('http://localhost:5000/audio-stream', {
+      transports: ['websocket'],
+      auth: {
+        token: 'your_session_token_from_login'
+      }
+    });
+    ```
+
+    **Authentication:**
+    - Token must be obtained from POST /auth/login
+    - Pass token in `auth.token` parameter during connection
+    - Connection will be rejected if token is invalid or expired
+
+    ## Client to Server Events
+
+    ### Event: audio_chunk
+    Send audio data chunk for real-time transcription.
+
+    **Payload:**
+    ```json
+    {
+      "audio_chunk": "BASE64_ENCODED_PCM_AUDIO_DATA",
+      "timestamp": "2025-12-04T10:30:01.500Z"
+    }
+    ```
+
+    **Audio Specifications:**
+    - Encoding: Linear PCM (linear16)
+    - Sample Rate: 16000 Hz
+    - Channels: Mono (1 channel)
+    - Bit Depth: 16 bit
+    - Chunk Duration: 500ms - 1000ms recommended
+    - Format: Raw PCM data encoded in Base64
+
+    **TypeScript Example:**
+    ```typescript
+    socket.emit('audio_chunk', {
+      audio_chunk: audioData.toString('base64'),
+      timestamp: new Date().toISOString()
+    });
+    ```
+
+    ### Event: stop_streaming
+    Stop the audio streaming session.
+
+    **Payload:** Empty object or no payload
+
+    **TypeScript Example:**
+    ```typescript
+    socket.emit('stop_streaming');
+    ```
+
+    ## Server to Client Events
+
+    ### Event: connected
+    Received when WebSocket connection is successfully established.
+
+    **Payload:**
+    ```json
+    {
+      "message": "Successfully connected to audio streaming service",
+      "user_id": "mario_rossi",
+      "timestamp": "2025-12-04T10:30:00"
+    }
+    ```
+
+    ### Event: transcription
+    Received when transcription results are available (interim or final).
+
+    **Payload:**
+    ```json
+    {
+      "transcript": "Ciao, come stai?",
+      "is_final": false,
+      "timestamp": "2025-12-04T10:30:02",
+      "confidence": 0.95
+    }
+    ```
+
+    **Fields:**
+    - `transcript` (string): Transcribed text
+    - `is_final` (boolean): true for final transcription, false for interim results
+    - `timestamp` (string): ISO 8601 timestamp
+    - `confidence` (number): Confidence score (0.0 - 1.0)
+
+    **TypeScript Example:**
+    ```typescript
+    socket.on('transcription', (data) => {
+      if (data.is_final) {
+        // Handle final transcription
+        setFinalText(prev => prev + ' ' + data.transcript);
+      } else {
+        // Handle interim transcription (live preview)
+        setInterimText(data.transcript);
+      }
+    });
+    ```
+
+    ### Event: streaming_stopped
+    Received when streaming is successfully stopped.
+
+    **Payload:**
+    ```json
+    {
+      "message": "Streaming stopped successfully",
+      "timestamp": "2025-12-04T10:35:00"
+    }
+    ```
+
+    ### Event: error
+    Received when an error occurs during streaming.
+
+    **Payload:**
+    ```json
+    {
+      "message": "Error processing audio data",
+      "timestamp": "2025-12-04T10:30:05"
+    }
+    ```
+
+    **Common Errors:**
+    - "Connection not initialized": Audio sent before connection established
+    - "Invalid audio data format": Audio not in valid Base64 format
+    - "Error processing audio data": General processing error
+    - "Transcription service error": Deepgram API error
+
+    ## Complete Integration Flow
+
+    1. **Authenticate:**
+       ```typescript
+       const response = await fetch('http://localhost:5000/auth/login', {
+         method: 'POST',
+         headers: {'Content-Type': 'application/json'},
+         body: JSON.stringify({username: 'user', password: 'pass'})
+       });
+       const {auth_token} = await response.json();
+       ```
+
+    2. **Connect WebSocket:**
+       ```typescript
+       const socket = io('http://localhost:5000/audio-stream', {
+         auth: {token: auth_token}
+       });
+       ```
+
+    3. **Handle Events:**
+       ```typescript
+       socket.on('connected', () => console.log('Connected'));
+       socket.on('transcription', handleTranscription);
+       socket.on('error', handleError);
+       ```
+
+    4. **Start Recording & Streaming:**
+       ```typescript
+       // Record audio and send chunks
+       setInterval(() => {
+         const audioChunk = getAudioChunk(); // Your recording logic
+         socket.emit('audio_chunk', {
+           audio_chunk: audioChunk.toString('base64'),
+           timestamp: new Date().toISOString()
+         });
+       }, 1000);
+       ```
+
+    5. **Stop Streaming:**
+       ```typescript
+       socket.emit('stop_streaming');
+       ```
+
+    6. **Disconnect:**
+       ```typescript
+       socket.disconnect();
+       ```
+
+    7. **Logout (optional):**
+       ```typescript
+       await fetch('http://localhost:5000/auth/logout', {
+         method: 'POST',
+         headers: {'Content-Type': 'application/json'},
+         body: JSON.stringify({auth_token})
+       });
+       ```
+
+    ## Transcription Service Details
+
+    - **Provider:** Deepgram Nova-2
+    - **Language:** Italian (it) - configurable in backend
+    - **Features:**
+      - Smart formatting (punctuation, capitalization)
+      - Interim results for live preview
+      - High accuracy for conversational audio
+      - Real-time streaming with low latency
+
+    ## Best Practices
+
+    1. **Audio Quality:**
+       - Use device's best microphone
+       - Record in quiet environment
+       - Maintain consistent volume
+
+    2. **Chunk Size:**
+       - 500ms - 1000ms optimal for balance
+       - Smaller chunks = lower latency, higher overhead
+       - Larger chunks = higher latency, lower overhead
+
+    3. **Error Handling:**
+       - Always handle 'error' events
+       - Implement reconnection logic
+       - Validate token before connecting
+
+    4. **Performance:**
+       - Send audio chunks at consistent intervals
+       - Don't buffer too much audio client-side
+       - Monitor network connectivity
+
+    5. **User Experience:**
+       - Show interim results for immediate feedback
+       - Display final results separately
+       - Indicate connection status visually
+
+  examples:
+    - name: React Native Complete Implementation
+      language: typescript
+      code: |
+        import React, {useState, useEffect} from 'react';
+        import io from 'socket.io-client';
+        import AudioRecorderPlayer from 'react-native-audio-recorder-player';
+
+        const AudioStreamingScreen = () => {
+          const [socket, setSocket] = useState(null);
+          const [authToken, setAuthToken] = useState('');
+          const [finalTranscript, setFinalTranscript] = useState('');
+          const [interimTranscript, setInterimTranscript] = useState('');
+
+          // 1. Login
+          const login = async () => {
+            const res = await fetch('http://localhost:5000/auth/login', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({username: 'user', password: 'pass'})
+            });
+            const data = await res.json();
+            setAuthToken(data.auth_token);
+          };
+
+          // 2. Connect WebSocket
+          const connect = () => {
+            const newSocket = io('http://localhost:5000/audio-stream', {
+              auth: {token: authToken}
+            });
+
+            newSocket.on('connected', (data) => console.log('Connected'));
+            newSocket.on('transcription', (data) => {
+              if (data.is_final) {
+                setFinalTranscript(prev => prev + ' ' + data.transcript);
+                setInterimTranscript('');
+              } else {
+                setInterimTranscript(data.transcript);
+              }
+            });
+            newSocket.on('error', (error) => console.error(error));
+
+            setSocket(newSocket);
+          };
+
+          // 3. Stream audio (simplified)
+          const streamAudio = () => {
+            // Your audio recording logic here
+            // Send chunks every 1 second
+          };
+
+          return (
+            <View>
+              <Button title="Login" onPress={login} />
+              <Button title="Connect" onPress={connect} />
+              <Text>Final: {finalTranscript}</Text>
+              <Text>Interim: {interimTranscript}</Text>
+            </View>
+          );
+        };
