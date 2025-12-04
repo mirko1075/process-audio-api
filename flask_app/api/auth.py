@@ -33,8 +33,6 @@ def login():
         return jsonify({'error': 'Username is required'}), 400
 
     username = data.get('username')
-    password = data.get('password', '')  # Not validated in demo
-
     # Generate secure session token
     auth_token = f"session_{secrets.token_urlsafe(32)}"
     expires_at = datetime.utcnow() + timedelta(hours=24)
