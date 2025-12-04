@@ -15,7 +15,7 @@ def client(monkeypatch):
     monkeypatch.setenv("FLASK_ENV", "testing")
 
     from flask_app import create_app
-    app = create_app()
+    app, socketio = create_app()
     app.config['TESTING'] = True
     
     with app.test_client() as client:
