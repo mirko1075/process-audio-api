@@ -6,7 +6,7 @@ services:
     plan: starter
 
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn -k eventlet -w 1 app:app --bind 0.0.0.0:$PORT --log-level info --access-logfile - --error-logfile -
+    startCommand: gunicorn -k eventlet -w 1 wsgi:application --bind 0.0.0.0:$PORT --log-level info --access-logfile - --error-logfile -
 
     healthCheckPath: /health
 
