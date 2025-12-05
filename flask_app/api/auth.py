@@ -4,7 +4,7 @@ from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
 import secrets
 
-bp = Blueprint('auth', __name__)
+bp = Blueprint('mobile_auth', __name__)
 logger = logging.getLogger(__name__)
 
 # In-memory session storage (for demo purposes)
