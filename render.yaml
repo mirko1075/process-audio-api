@@ -29,6 +29,6 @@ services:
       - key: JWT_SECRET_KEY
         generateValue: true
       - key: CORS_ORIGINS
-        value: "*"
+        value: "https://meeting-streamer.vercel.app/"
       - key: LOG_LEVEL
         value: INFO
