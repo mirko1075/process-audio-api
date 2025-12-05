@@ -19,6 +19,21 @@ ALGORITHMS = ["RS256"]
 # Timeout for Auth0 API requests (in seconds)
 AUTH0_REQUEST_TIMEOUT = int(os.getenv('AUTH0_REQUEST_TIMEOUT', '30'))
 
+# Cache PyJWKClient instance to avoid repeated JWKS downloads
+_jwks_client = None
+
+
+def get_jwks_client():
+    """Get cached PyJWKClient instance for JWKS key retrieval.
+    
+    Returns:
+        Cached PyJWKClient instance
+    """
+    global _jwks_client
+    if _jwks_client is None:
+        _jwks_client = PyJWKClient(get_jwks_url())
+    return _jwks_client
+
 
 class Auth0Error(Exception):
     """Custom exception for Auth0 authentication errors."""
@@ -87,8 +102,8 @@ def verify_jwt(token: str) -> Dict:
         # Get JWKS URL
         jwks_url = get_jwks_url()
 
-        # Initialize PyJWKClient to fetch signing keys
-        jwks_client = PyJWKClient(jwks_url)
+        # Get cached PyJWKClient instance (avoids repeated JWKS downloads)
+        jwks_client = get_jwks_client()
 
         # Get the signing key from JWT header
         signing_key = jwks_client.get_signing_key_from_jwt(token)
