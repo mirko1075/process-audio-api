@@ -132,7 +132,7 @@ def verify_jwt(token: str) -> Dict:
         raise Auth0Error(f"Invalid token: {str(e)}")
     except Exception as e:
         logger.exception(f"Token verification error: {e}")
-        raise Auth0Error(f"Token verification failed: {str(e)}")
+        raise Auth0Error("Token verification failed")
 
 
 def require_auth(f: Callable) -> Callable:
