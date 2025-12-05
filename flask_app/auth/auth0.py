@@ -19,6 +19,18 @@ ALGORITHMS = ["RS256"]
 # Timeout for Auth0 API requests (in seconds)
 AUTH0_REQUEST_TIMEOUT = int(os.getenv('AUTH0_REQUEST_TIMEOUT', '30'))
 
+# Security: Feature flag to allow insecure session token fallback
+# WARNING: This should ONLY be enabled in development/testing environments
+# In production, this MUST be set to 'false' or omitted entirely
+ALLOW_INSECURE_SESSION_AUTH = os.getenv('ALLOW_INSECURE_SESSION_AUTH', 'false').lower() == 'true'
+
+if ALLOW_INSECURE_SESSION_AUTH:
+    logger.warning(
+        "⚠️  SECURITY WARNING: ALLOW_INSECURE_SESSION_AUTH is enabled! "
+        "Session token fallback allows unauthenticated access. "
+        "This should NEVER be enabled in production."
+    )
+
 # Cache PyJWKClient instance to avoid repeated JWKS downloads
 _jwks_client = None
 
