@@ -256,7 +256,9 @@ def init_audio_stream_handlers(socketio):
 
                 # Close Deepgram connection
                 dg_connection = connection_info['dg_connection']
-                dg_connection.finish()
+                if connection_info.get('is_deepgram_open'):
+                    dg_connection.finish()
+                    connection_info['is_deepgram_open'] = False
 
                 # Remove from active connections
                 del active_connections[request.sid]
