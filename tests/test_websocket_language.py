@@ -76,14 +76,14 @@ def test_language_selection():
                 sio.connect(
                     WEBSOCKET_URL,
                     namespaces=[NAMESPACE],
-                    auth={'token': auth_token}
+                    auth={'token': token}
                 )
             else:
                 # Test with language parameter
                 sio.connect(
                     f"{WEBSOCKET_URL}?lang={lang_code}",
                     namespaces=[NAMESPACE],
-                    auth={'token': auth_token}
+                    auth={'token': token}
                 )
             
             # Wait for connection response
@@ -210,7 +210,7 @@ def test_audio_streaming():
         sio.connect(
             f"{WEBSOCKET_URL}?lang={language}",
             namespaces=[NAMESPACE],
-            auth={'token': auth_token}
+            auth={'token': token}
         )
         
         # Keep connection alive for a few seconds
