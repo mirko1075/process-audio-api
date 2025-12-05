@@ -1,15 +1,13 @@
 """Authentication API blueprint for mobile app login."""
 import logging
 from flask import Blueprint, request, jsonify
-from datetime import datetime, timedelta
-import secrets
+from flask_app.services.session_manager import get_session_manager
 
 bp = Blueprint('mobile_auth', __name__)
 logger = logging.getLogger(__name__)
 
-# In-memory session storage (for demo purposes)
-# In production, use Redis or database
-active_sessions = {}
+# Get session manager instance
+session_manager = get_session_manager()
 
 
 @bp.route('/login', methods=['POST'])
@@ -33,24 +31,14 @@ def login():
         return jsonify({'error': 'Username is required'}), 400
 
     username = data.get('username')
-    # Generate secure session token
-    auth_token = f"session_{secrets.token_urlsafe(32)}"
-    expires_at = datetime.utcnow() + timedelta(hours=24)
-
-    # Store session in memory
-    active_sessions[auth_token] = {
-        'username': username,
-        'user_id': username.lower().replace(' ', '_'),
-        'created_at': datetime.utcnow().isoformat(),
-        'expires_at': expires_at.isoformat()
-    }
+    
+    # Create session using session manager
+    session_data = session_manager.create_session(username, expires_hours=24)
 
     logger.info(f"Login successful for user: {username}")
 
     return jsonify({
-        'auth_token': auth_token,
-        'user_id': username.lower().replace(' ', '_'),
-        'expires_at': expires_at.isoformat(),
+        **session_data,
         'message': 'Login successful'
     }), 200
 
@@ -65,10 +53,7 @@ def logout():
     data = request.get_json()
     auth_token = data.get('auth_token') if data else None
 
-    if auth_token and auth_token in active_sessions:
-        username = active_sessions[auth_token]['username']
-        del active_sessions[auth_token]
-        logger.info(f"Logout successful for user: {username}")
+    if session_manager.invalidate_session(auth_token):
         return jsonify({'message': 'Logout successful'}), 200
 
     return jsonify({'message': 'Invalid or expired token'}), 401
@@ -84,19 +69,13 @@ def verify_token():
     data = request.get_json()
     auth_token = data.get('auth_token') if data else None
 
-    if auth_token and auth_token in active_sessions:
-        session = active_sessions[auth_token]
-        expires_at = datetime.fromisoformat(session['expires_at'])
-
-        # Check if token is expired
-        if datetime.utcnow() > expires_at:
-            del active_sessions[auth_token]
-            return jsonify({'valid': False, 'message': 'Token expired'}), 401
-
+    session_info = session_manager.get_session_info(auth_token)
+    
+    if session_info:
         return jsonify({
             'valid': True,
-            'user_id': session['user_id'],
-            'username': session['username']
+            'user_id': session_info['user_id'],
+            'username': session_info['username']
         }), 200
 
     return jsonify({'valid': False, 'message': 'Invalid token'}), 401
@@ -104,22 +83,9 @@ def verify_token():
 
 def is_valid_session(auth_token: str) -> bool:
     """Check if a session token is valid (used by WebSocket handler)."""
-    if not auth_token or auth_token not in active_sessions:
-        return False
-
-    session = active_sessions[auth_token]
-    expires_at = datetime.fromisoformat(session['expires_at'])
-
-    # Check if token is expired
-    if datetime.utcnow() > expires_at:
-        del active_sessions[auth_token]
-        return False
-
-    return True
+    return session_manager.validate_session(auth_token)
 
 
 def get_session_info(auth_token: str) -> dict:
     """Get session information for a valid token."""
-    if auth_token in active_sessions:
-        return active_sessions[auth_token]
-    return None
+    return session_manager.get_session_info(auth_token)
