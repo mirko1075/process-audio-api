@@ -4,6 +4,9 @@ services:
     name: audio-transcription-api
     runtime: python
     plan: starter
+    region: oregon
+    branch: main
+    autoDeploy: true
 
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn -k eventlet -w 1 wsgi:application --bind 0.0.0.0:$PORT --log-level info --access-logfile - --error-logfile -
@@ -19,6 +22,8 @@ services:
         sync: false
       - key: AUTH0_AUDIENCE
         sync: false
+      - key: AUTH0_REQUEST_TIMEOUT
+        value: "30"
       - key: DEEPGRAM_API_KEY
         sync: false
       - key: JWT_SECRET_KEY
@@ -27,7 +32,3 @@ services:
         value: "*"
       - key: LOG_LEVEL
         value: INFO
-
-region: oregon
-branch: main
-autoDeploy: true

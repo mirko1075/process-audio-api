@@ -16,6 +16,9 @@ AUTH0_DOMAIN = os.getenv('AUTH0_DOMAIN')
 AUTH0_AUDIENCE = os.getenv('AUTH0_AUDIENCE')
 ALGORITHMS = ["RS256"]
 
+# Timeout for Auth0 API requests (in seconds)
+AUTH0_REQUEST_TIMEOUT = int(os.getenv('AUTH0_REQUEST_TIMEOUT', '30'))
+
 
 class Auth0Error(Exception):
     """Custom exception for Auth0 authentication errors."""
@@ -225,7 +228,7 @@ def get_user_info(access_token: str) -> Dict:
         response = requests.get(
             userinfo_url,
             headers={'Authorization': f'Bearer {access_token}'},
-            timeout=10
+            timeout=AUTH0_REQUEST_TIMEOUT
         )
         response.raise_for_status()
         return response.json()
