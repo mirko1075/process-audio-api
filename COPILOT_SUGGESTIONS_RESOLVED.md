@@ -67,7 +67,71 @@ Implemented comprehensive security fix with feature flag approach:
 
 ---
 
-### 2. Missing Test Coverage for Auth0 Module ✅ COMPLETED
+### 2. Redundant Token Extraction in Protected Endpoints ✅ FIXED
+
+**Original Suggestion:**
+> The endpoint extracts the token manually from the Authorization header (lines 77-78) when it's already been validated and attached to request.user by the @require_auth decorator. This is redundant and could lead to inconsistencies if the token extraction logic differs. Use the already-validated user information from request.user or pass the original token through the decorator if needed.
+
+**Issue:**
+The `/api/userinfo` endpoint was calling `get_token_from_header()` to manually extract the token from the Authorization header, even though the `@require_auth` decorator had already:
+- Extracted the token
+- Validated it with Auth0
+- Verified the signature
+
+This created several problems:
+- **Code duplication**: Token extraction logic repeated
+- **Potential inconsistencies**: Two different extraction paths could diverge
+- **Unnecessary work**: Re-parsing headers after decorator already did it
+- **Maintenance burden**: Changes to token logic need updates in multiple places
+
+**Resolution:**
+
+1. **Enhanced `@require_auth` Decorator:**
+   ```python
+   # Now stores the validated token for reuse
+   request.auth_token = token  # Added
+   g.auth_token = token         # Added (for nested functions)
+   ```
+
+2. **Simplified `/api/userinfo` Endpoint:**
+   ```python
+   # BEFORE (redundant)
+   token = get_token_from_header()  # Re-extracts token
+   if not token:
+       return error
+   user_info = get_user_info(token)
+   
+   # AFTER (clean)
+   token = request.auth_token       # Reuses validated token
+   user_info = get_user_info(token)
+   ```
+
+3. **Cleanup:**
+   - Removed unused `get_token_from_header` import from `protected.py`
+   - Removed redundant null check (decorator guarantees token exists)
+
+4. **Added Test Coverage:**
+   - New test: `test_decorator_stores_token()`
+   - Verifies `request.auth_token` is properly set
+   - Total Auth0 tests: 30 (increased from 29)
+
+**Benefits:**
+- ✅ **DRY Principle**: Token extracted once, reused everywhere
+- ✅ **Single Source of Truth**: Decorator is authoritative for token
+- ✅ **Better Performance**: No redundant header parsing
+- ✅ **Type Safety**: Token guaranteed to exist after decorator
+- ✅ **Maintainability**: Simpler code, fewer edge cases
+
+**Files Modified:**
+- `flask_app/auth/auth0.py` - Store token in request/g objects
+- `flask_app/api/protected.py` - Use `request.auth_token` instead of re-extraction
+- `tests/test_auth0.py` - Added test for token storage
+
+**Commit:** `46186c4` - "refactor: eliminate redundant token extraction in protected endpoints"
+
+---
+
+### 3. Missing Test Coverage for Auth0 Module ✅ COMPLETED
 
 **Original Suggestion:**
 > The auth0.py module includes critical authentication logic (JWT verification, token validation) but no corresponding test file was added. Given that other modules in the codebase have test coverage (test_auth_system.py exists), the new Auth0 functionality should also have comprehensive tests covering token verification, error cases, and decorator behavior.
@@ -162,8 +226,9 @@ services:
 
 | Suggestion | Severity | Status | Action Taken | Commit |
 |------------|----------|--------|--------------|--------|
-| **Auth Bypass Vulnerability** | 🔴 CRITICAL | ✅ Fixed | Feature flag + endpoint deprecation | [TBD] |
-| Auth0 Test Coverage | Medium | ✅ Completed | Created 29-test suite | 2bc874e |
+| **Auth Bypass Vulnerability** | 🔴 CRITICAL | ✅ Fixed | Feature flag + endpoint deprecation | 7a9ba1e |
+| **Redundant Token Extraction** | Medium | ✅ Fixed | Store token in decorator, reuse in endpoints | 46186c4 |
+| Auth0 Test Coverage | Medium | ✅ Completed | Created 30-test suite | 2bc874e |
 | Session Management | Medium | ✅ Previously Done | Already using SessionManager | N/A |
 | Render YAML Schema | Low | ✅ Already Correct | No changes needed | N/A |
 
