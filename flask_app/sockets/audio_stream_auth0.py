@@ -95,7 +95,7 @@ def authenticate_websocket(auth: dict) -> dict:
             'payload': payload
         }
     except Auth0Error as e:
-        logger.debug(f"Auth0 verification failed, trying session token: {e.message}")
+        logger.debug("Authentication token verification failed.")
 
     # Fallback to session token (mobile app compatibility)
     try:
