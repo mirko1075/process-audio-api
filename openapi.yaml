@@ -256,7 +256,7 @@ paths:
                     type: string
                     example: "AI Medical Transcription Backend"
 
-  /auth/login:
+  /mobile-auth/login:
     post:
       summary: Mobile app login
       description: |
@@ -314,7 +314,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /auth/verify:
+  /mobile-auth/verify:
     post:
       summary: Verify session token
       description: Check if a session token is valid and not expired
@@ -365,7 +365,7 @@ paths:
                     type: string
                     example: "Invalid token"
 
-  /auth/logout:
+  /mobile-auth/logout:
     post:
       summary: Logout user
       description: Invalidate a session token
@@ -1783,7 +1783,7 @@ x-websocket-streaming:
     ```
 
     **Authentication:**
-    - Token must be obtained from POST /auth/login
+    - Token must be obtained from POST /mobile-auth/login
     - Pass token in `auth.token` parameter during connection
     - Connection will be rejected if token is invalid or expired
 
@@ -1904,7 +1904,7 @@ x-websocket-streaming:
 
     1. **Authenticate:**
        ```typescript
-       const response = await fetch('http://localhost:5000/auth/login', {
+       const response = await fetch('http://localhost:5000/mobile-auth/login', {
          method: 'POST',
          headers: {'Content-Type': 'application/json'},
          body: JSON.stringify({username: 'user', password: 'pass'})
@@ -1950,7 +1950,7 @@ x-websocket-streaming:
 
     7. **Logout (optional):**
        ```typescript
-       await fetch('http://localhost:5000/auth/logout', {
+       await fetch('http://localhost:5000/mobile-auth/logout', {
          method: 'POST',
          headers: {'Content-Type': 'application/json'},
          body: JSON.stringify({auth_token})
@@ -2010,7 +2010,7 @@ x-websocket-streaming:
 
           // 1. Login
           const login = async () => {
-            const res = await fetch('http://localhost:5000/auth/login', {
+            const res = await fetch('http://localhost:5000/mobile-auth/login', {
               method: 'POST',
               headers: {'Content-Type': 'application/json'},
               body: JSON.stringify({username: 'user', password: 'pass'})
