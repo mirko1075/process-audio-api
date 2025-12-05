@@ -16,12 +16,15 @@ fpdf==1.7.2
 python-docx==1.1.2
 nltk==3.9.1
 transformers==4.48.1
+pandas==2.2.3  # Required by openai SDK for optional features
 fsspec==2024.9.0  # transformers dependency pin for deterministic installs
 google-cloud-translate==3.19.0
 google-auth==2.38.0
 requests==2.32.3
 gunicorn==23.0.0
 eventlet==0.36.1
+PyJWT[crypto]==2.10.1
+cryptography==44.0.0
 pytest==8.3.4
 pydub==0.25.1
 tiktoken==0.8.0

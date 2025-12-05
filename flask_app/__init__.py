@@ -122,6 +122,14 @@ def register_blueprints(app: Flask) -> None:
     except ImportError:
         logging.warning("Mobile authentication blueprint not found, skipping")
 
+    # Try to import Auth0 protected routes blueprint
+    try:
+        from flask_app.api.protected import bp as protected_bp
+        app.register_blueprint(protected_bp)
+        logging.info("Auth0 protected routes blueprint registered")
+    except ImportError:
+        logging.warning("Auth0 protected routes blueprint not found, skipping")
+
     # Register other blueprints with appropriate URL prefixes
     app.register_blueprint(health_bp)
     app.register_blueprint(transcription_bp, url_prefix='/transcriptions')
@@ -132,10 +140,20 @@ def register_blueprints(app: Flask) -> None:
 
 def register_socketio_handlers(socketio: SocketIO) -> None:
     """Register WebSocket event handlers."""
+    # Try Auth0-enabled WebSocket handlers first (preferred)
+    try:
+        from flask_app.sockets.audio_stream_auth0 import init_audio_stream_handlers
+        init_audio_stream_handlers(socketio)
+        logging.info("WebSocket handlers (Auth0-enabled) registered successfully")
+        return
+    except ImportError as e:
+        logging.debug(f"Auth0 WebSocket handlers not found: {e}")
+
+    # Fallback to session-based WebSocket handlers
     try:
         from flask_app.sockets.audio_stream import init_audio_stream_handlers
         init_audio_stream_handlers(socketio)
-        logging.info("WebSocket handlers registered successfully")
+        logging.info("WebSocket handlers (session-based) registered successfully")
     except ImportError as e:
         logging.warning(f"WebSocket handlers not found: {e}")
 
@@ -145,6 +163,14 @@ def register_error_handlers(app: Flask) -> None:
     from flask import jsonify
     from werkzeug.exceptions import HTTPException
     from utils.exceptions import TranslationError, TranscriptionError
+
+    # Register Auth0 error handlers
+    try:
+        from flask_app.auth.auth0 import register_auth_error_handlers
+        register_auth_error_handlers(app)
+        logging.info("Auth0 error handlers registered")
+    except ImportError:
+        logging.warning("Auth0 error handlers not found, skipping")
 
     @app.errorhandler(400)
     def bad_request(error):

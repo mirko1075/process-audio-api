@@ -52,11 +52,10 @@ def init_audio_stream_handlers(socketio):
                 dg_client = DeepgramClient(config.deepgram.api_key)
                 dg_connection = dg_client.listen.live.v("1")
 
-                # Store connection info
+                # Store connection info (token validated but not stored for security)
                 from flask import request
                 active_connections[request.sid] = {
                     'user_id': user_id,
-                    'token': token,
                     'dg_connection': dg_connection,
                     'connected_at': datetime.utcnow().isoformat(),
                     'is_deepgram_open': False
