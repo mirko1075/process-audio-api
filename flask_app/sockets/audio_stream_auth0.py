@@ -193,6 +193,10 @@ def init_audio_stream_handlers(socketio):
 
         except Exception as e:
             logger.warning(f"Connection rejected: {str(e)}")
+            emit('error', {
+                'message': f'Connection rejected: {str(e)}',
+                'timestamp': datetime.utcnow().isoformat()
+            }, namespace='/audio-stream')
             return False
 
     @socketio.on('audio_chunk', namespace='/audio-stream')
