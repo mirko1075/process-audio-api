@@ -350,20 +350,17 @@ def init_audio_stream_handlers(socketio):
         from flask import request
 
         if request.sid in active_connections:
+            connection_info = active_connections[request.sid]
+            user_id = connection_info['user_id']
             try:
-                connection_info = active_connections[request.sid]
-                user_id = connection_info['user_id']
-
                 # Close Deepgram connection
                 dg_connection = connection_info['dg_connection']
                 if connection_info.get('is_deepgram_open'):
                     dg_connection.finish()
                     connection_info['is_deepgram_open'] = False
-
-                # Remove from active connections
-                del active_connections[request.sid]
-
                 logger.info(f"WebSocket disconnected: user_id={user_id}")
-
             except Exception as e:
                 logger.error(f"Error during disconnect cleanup: {e}")
+            finally:
+                # Always remove from active connections to prevent memory leaks
+                del active_connections[request.sid]
