@@ -116,7 +116,7 @@ def verify_jwt(token: str) -> Dict:
     except jwt.InvalidTokenError as e:
         raise Auth0Error(f"Invalid token: {str(e)}")
     except Exception as e:
-        logger.error(f"Token verification error: {e}")
+        logger.exception(f"Token verification error: {e}")
         raise Auth0Error(f"Token verification failed: {str(e)}")
 
 
