@@ -1,6 +1,6 @@
 """WSGI entry point for production deployment with gunicorn."""
 
-from flask_app import create_app
+from core import create_app
 
 # Create Flask app and SocketIO instance
 app, socketio = create_app()

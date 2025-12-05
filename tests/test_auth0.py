@@ -17,7 +17,7 @@ from flask import Flask, g, request
 from werkzeug.test import Client
 from werkzeug.wrappers import Response
 
-from flask_app.auth.auth0 import (
+from core.auth.auth0 import (
     Auth0Error,
     get_token_from_header,
     verify_jwt,
