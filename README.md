@@ -118,6 +118,41 @@ app.py                        # Main application entry point
 | `POST` | `/utilities/log-usage` | Log usage for billing (Google Sheets integration) |
 | `POST` | `/utilities/text-file` | Create downloadable text files |
 
+### **🔌 WebSocket Real-Time Transcription**
+
+**Namespace**: `/audio-stream`
+
+Real-time audio transcription using Deepgram Nova-2 with **dynamic language support**.
+
+#### Connection
+
+```javascript
+const socket = io('wss://your-api.com/audio-stream', {
+  auth: {
+    token: 'your-auth0-jwt-or-session-token'
+  },
+  query: {
+    lang: 'it'  // Optional: Language code (defaults to 'en')
+  }
+});
+```
+
+#### Events
+
+| Event | Direction | Description |
+|-------|-----------|-------------|
+| `connect` | Client → Server | Establish WebSocket connection with auth |
+| `connected` | Server → Client | Confirmation with selected language |
+| `audio_data` | Client → Server | Send audio chunks (base64 encoded) |
+| `transcription` | Server → Client | Receive transcription results |
+| `disconnect` | Client → Server | Close connection |
+
+#### Supported Languages (29)
+
+`en`, `es`, `fr`, `it`, `de`, `pt`, `nl`, `hi`, `ja`, `ko`, `zh`, `sv`, `no`, `da`, `fi`, `pl`, `ru`, `tr`, `ar`, `el`, `he`, `cs`, `uk`, `ro`, `hu`, `id`, `ms`, `th`, `vi`
+
+📖 **Full documentation**: See [WEBSOCKET_LANGUAGE_SUPPORT.md](./WEBSOCKET_LANGUAGE_SUPPORT.md)
+
 ## 🔧 Environment Variables
 
 | Variable | Required | Description |

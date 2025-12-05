@@ -1,28 +1,39 @@
 services:
+  # Main Flask API with SocketIO WebSocket support
   - type: web
     name: audio-transcription-api
     runtime: python
-    region: frankfurt
-    plan: free
+    plan: starter
+    region: oregon
+    branch: main
+    autoDeploy: true
+
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:$PORT app:app
+    startCommand: gunicorn -k eventlet -w 1 wsgi:application --bind 0.0.0.0:$PORT --log-level info --access-logfile - --error-logfile -
+
+    healthCheckPath: /health
+
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.0
       - key: FLASK_ENV
         value: production
-      - key: DATABASE_URL
+      - key: FLASK_APP
+        value: app.py
+      - key: AUTH0_DOMAIN
+        sync: false
+      - key: AUTH0_AUDIENCE
+        sync: false
+      - key: AUTH0_REQUEST_TIMEOUT
+        value: "30"
+      # SECURITY: Disable insecure session auth in production
+      # This blocks the unauthenticated /mobile-auth/login endpoint
+      # and requires Auth0 JWT for WebSocket connections
+      - key: ALLOW_INSECURE_SESSION_AUTH
+        value: "false"
+      - key: DEEPGRAM_API_KEY
         sync: false
       - key: JWT_SECRET_KEY
         generateValue: true
-      - key: DEEPGRAM_API_KEY
-        sync: false
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: ASSEMBLYAI_API_KEY
-        sync: false
-      - key: DEEPSEEK_API_KEY
-        sync: false
-      - key: GOOGLE_APPLICATION_CREDENTIALS
-        sync: false
-    healthCheckPath: /health
+      - key: CORS_ORIGINS
+        value: "https://meeting-streamer.vercel.app/"
+      - key: LOG_LEVEL
+        value: INFO

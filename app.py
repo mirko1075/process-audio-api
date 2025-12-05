@@ -1,7 +1,7 @@
 """Main application entry point using Flask application factory pattern."""
 
 import os
-from flask_app import create_app
+from core import create_app
 
 # Create Flask application and SocketIO using application factory
 app, socketio = create_app()
