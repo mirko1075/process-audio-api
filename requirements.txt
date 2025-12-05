@@ -30,3 +30,35 @@ pydub==0.25.1
 tiktoken==0.8.0
 yt-dlp==2024.11.4
 openai-whisper==20240930
+Flask==3.1.0
+Flask-CORS==5.0.0
+Flask-SocketIO==5.4.1
+Flask-SQLAlchemy==3.1.1
+Flask-JWT-Extended==4.6.0
+Flask-Bcrypt==1.0.1
+Flask-Migrate==4.0.7
+psycopg2-binary==2.9.9
+python-dotenv==1.0.1
+deepgram-sdk==3.10.0
+httpx==0.28.1
+openai==1.61.1
+assemblyai==0.37.0
+openpyxl==3.1.5
+fpdf==1.7.2
+python-docx==1.1.2
+nltk==3.9.1
+transformers==4.48.1
+pandas==2.2.3  # Required by openai SDK for optional features
+fsspec==2024.9.0  # transformers dependency pin for deterministic installs
+google-cloud-translate==3.19.0
+google-auth==2.38.0
+requests==2.32.3
+gunicorn==23.0.0
+eventlet==0.36.1
+PyJWT[crypto]==2.10.1
+cryptography==44.0.0
+pytest==8.3.4
+pydub==0.25.1
+tiktoken==0.8.0
+yt-dlp==2024.11.4
+openai-whisper==20240930
