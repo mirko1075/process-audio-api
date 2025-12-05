@@ -10,7 +10,7 @@ def client():
     """Create a test client for the Flask app."""
     from flask_app import create_app
     
-    app = create_app({
+    app, socketio = create_app({
         'TESTING': True,
         'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
         'WTF_CSRF_ENABLED': False,

@@ -1,5 +1,6 @@
 Flask==3.1.0
 Flask-CORS==5.0.0
+Flask-SocketIO==5.4.1
 Flask-SQLAlchemy==3.1.1
 Flask-JWT-Extended==4.6.0
 Flask-Bcrypt==1.0.1
@@ -20,6 +21,7 @@ google-cloud-translate==3.19.0
 google-auth==2.38.0
 requests==2.32.3
 gunicorn==23.0.0
+eventlet==0.36.1
 pytest==8.3.4
 pydub==0.25.1
 tiktoken==0.8.0

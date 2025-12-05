@@ -4,3 +4,35 @@ __pycache__/
 **/__pycache__/
 google/
 docker-compose.yml
+venv_test/
+*.log
+*.sqlite3
+*.pyc
+.DS_Store
+.idea/
+.vscode/
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+.coverage
+server_test.pid
+uploads/
+*.pid
+
+# Test/Development files
+test_*.py
+*_test.py
+
+# Documentation that's not needed in production
+AUTHENTICATION_IMPLEMENTATION.md
+INTEGRATION_SUMMARY.md
+MERGE_RESOLUTION_SUMMARY.md
+MOBILE_API_GUIDE.md
+PROMPT_FOR_FRONTEND_DEV.md
+README_MOBILE_BACKEND.md
+YOUTUBE_FIXES.md
+
+# Postman collection (for local testing only)
+postman_collection.json

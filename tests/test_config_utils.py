@@ -29,7 +29,7 @@ def test_flask_app_creation(monkeypatch):
     
     from flask_app import create_app
     
-    app = create_app()
+    app, socketio = create_app()
     
     # Test app creation
     assert app is not None

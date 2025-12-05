@@ -9,7 +9,7 @@ def test_health_endpoint(monkeypatch):
 
     from flask_app import create_app  # Updated import path
 
-    app = create_app()
+    app, socketio = create_app()
     client = app.test_client()
     response = client.get("/health")
     assert response.status_code == 200
