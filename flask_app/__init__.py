@@ -60,7 +60,7 @@ def create_app(config_override: Optional[dict] = None) -> Tuple[Flask, SocketIO]
     socketio = SocketIO(
         app,
         cors_allowed_origins="*",  # Allow all origins for WebSocket
-        async_mode='threading',
+        async_mode='eventlet',  # Must match gunicorn worker class
         logger=True,
         engineio_logger=False
     )

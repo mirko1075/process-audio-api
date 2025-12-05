@@ -1,7 +1,6 @@
 """WebSocket handler for real-time audio streaming and transcription."""
 import logging
 import base64
-import json
 from flask_socketio import emit
 from datetime import datetime
 
@@ -230,7 +229,9 @@ def init_audio_stream_handlers(socketio):
 
             # Close Deepgram connection
             dg_connection = connection_info['dg_connection']
-            dg_connection.finish()
+            if connection_info.get('is_deepgram_open'):
+                dg_connection.finish()
+                connection_info['is_deepgram_open'] = False
 
             logger.info(f"Streaming stopped for user: {user_id}")
 
