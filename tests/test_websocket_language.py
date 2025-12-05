@@ -23,9 +23,16 @@ TEST_CASES = [
     (None, "en", "No language - should default to English"),
 ]
 
-def test_language_selection(auth_token: str):
+def test_language_selection():
     """Test WebSocket connection with different language parameters."""
-    
+    import os
+    import pytest
+
+    # Integration test: require WS_TEST_TOKEN env var to run
+    token = os.getenv('WS_TEST_TOKEN')
+    if not token:
+        pytest.skip('WS integration tests skipped: set WS_TEST_TOKEN to run')
+
     print("=" * 80)
     print("WebSocket Dynamic Language Support Test")
     print("=" * 80)
@@ -137,18 +144,30 @@ def test_language_selection(auth_token: str):
             print(f"         Error: {result['error']}")
         print()
     
-    # Exit code
-    sys.exit(0 if passed == total else 1)
+    # Assert all subtests passed when run under pytest
+    assert passed == total, f"{passed}/{total} websocket language tests passed"
 
 
-def test_audio_streaming(auth_token: str, language: str = "it"):
-    """Test sending audio data with a specific language."""
-    
+def test_audio_streaming():
+    """Test sending audio data with a specific language.
+
+    Integration test: requires WS_TEST_TOKEN env var. Optional WS_TEST_LANG
+    environment variable can override language.
+    """
+    import os
+    import pytest
+
+    token = os.getenv('WS_TEST_TOKEN')
+    if not token:
+        pytest.skip('WS integration tests skipped: set WS_TEST_TOKEN to run')
+
+    language = os.getenv('WS_TEST_LANG', 'it')
+
     print("=" * 80)
     print(f"WebSocket Audio Streaming Test (Language: {language})")
     print("=" * 80)
     print()
-    
+
     sio = socketio.Client()
     
     @sio.event
@@ -200,10 +219,11 @@ def test_audio_streaming(auth_token: str, language: str = "it"):
         # Disconnect
         sio.disconnect()
         print("\nTest completed successfully!")
-        
+        assert True
+
     except Exception as e:
         print(f"\n✗ Test failed: {e}")
-        sys.exit(1)
+        pytest.fail(f"WebSocket audio streaming test failed: {e}")
 
 
 if __name__ == "__main__":
