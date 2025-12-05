@@ -3,6 +3,11 @@
 This module provides WebSocket handlers that support BOTH:
 1. Auth0 JWT tokens (primary)
 2. Session tokens (fallback for mobile app compatibility)
+
+Features:
+- Dynamic language selection via query parameter
+- Deepgram Nova-2 real-time transcription
+- Multi-language support (30+ languages)
 """
 import logging
 import base64
@@ -19,6 +24,43 @@ from flask_app.auth.auth0 import verify_websocket_token, Auth0Error
 from flask_app.api.auth import is_valid_session, get_session_info
 
 logger = logging.getLogger(__name__)
+
+# Supported languages for Deepgram Nova-2 transcription
+# Complete list of languages supported by Deepgram's Nova-2 model
+SUPPORTED_LANGUAGES = [
+    "en",  # English
+    "es",  # Spanish
+    "fr",  # French
+    "it",  # Italian
+    "de",  # German
+    "pt",  # Portuguese
+    "nl",  # Dutch
+    "hi",  # Hindi
+    "ja",  # Japanese
+    "ko",  # Korean
+    "zh",  # Chinese
+    "sv",  # Swedish
+    "no",  # Norwegian
+    "da",  # Danish
+    "fi",  # Finnish
+    "pl",  # Polish
+    "ru",  # Russian
+    "tr",  # Turkish
+    "ar",  # Arabic
+    "el",  # Greek
+    "he",  # Hebrew
+    "cs",  # Czech
+    "uk",  # Ukrainian
+    "ro",  # Romanian
+    "hu",  # Hungarian
+    "id",  # Indonesian
+    "ms",  # Malay
+    "th",  # Thai
+    "vi",  # Vietnamese
+]
+
+# Default language if not specified or invalid
+DEFAULT_LANGUAGE = "en"
 
 # Store active connections
 active_connections = {}
@@ -81,7 +123,12 @@ def init_audio_stream_handlers(socketio):
 
     @socketio.on('connect', namespace='/audio-stream')
     def handle_connect(auth):
-        """Handle new WebSocket connection with Auth0 or session authentication."""
+        """Handle new WebSocket connection with Auth0 or session authentication.
+        
+        Supports dynamic language selection via query parameter:
+        - wss://.../audio-stream?lang=it
+        - Defaults to 'en' if not provided or invalid
+        """
         try:
             # Authenticate connection
             user_info = authenticate_websocket(auth)
@@ -96,14 +143,30 @@ def init_audio_stream_handlers(socketio):
                 dg_client = DeepgramClient(config.deepgram.api_key)
                 dg_connection = dg_client.listen.live.v("1")
 
-                # Store connection info
+                # Extract and validate language from query parameters
                 from flask import request
+                requested_lang = request.args.get('lang', DEFAULT_LANGUAGE)
+                
+                # Validate language - default to English if invalid
+                if requested_lang not in SUPPORTED_LANGUAGES:
+                    logger.warning(
+                        f"Invalid language '{requested_lang}' requested by user {user_id}. "
+                        f"Defaulting to '{DEFAULT_LANGUAGE}'"
+                    )
+                    language = DEFAULT_LANGUAGE
+                else:
+                    language = requested_lang
+                
+                logger.info(f"Language set to '{language}' for user {user_id}")
+
+                # Store connection info
                 active_connections[request.sid] = {
                     'user_id': user_id,
                     'auth_type': auth_type,
                     'user_info': user_info,
-                    'token': auth.get('token'),
+                    # token validated but not stored for security
                     'dg_connection': dg_connection,
+                    'language': language,  # Store selected language
                     'connected_at': datetime.utcnow().isoformat(),
                     'is_deepgram_open': False
                 }
@@ -154,10 +217,10 @@ def init_audio_stream_handlers(socketio):
                 dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
                 dg_connection.on(LiveTranscriptionEvents.Error, on_error)
 
-                # Configure Deepgram options
+                # Configure Deepgram options with dynamic language
                 options = LiveOptions(
                     model="nova-2",
-                    language="it",  # Italian - change as needed
+                    language=language,  # Use dynamically selected language
                     smart_format=True,
                     punctuate=True,
                     interim_results=True,
@@ -168,16 +231,17 @@ def init_audio_stream_handlers(socketio):
                 # Start Deepgram connection
                 if dg_connection.start(options):
                     active_connections[request.sid]['is_deepgram_open'] = True
-                    logger.info(f"Deepgram connection started for user: {user_id}")
+                    logger.info(f"Deepgram connection started for user: {user_id} with language: {language}")
                 else:
                     logger.error("Failed to start Deepgram connection")
                     return False
 
-                # Emit success message
+                # Emit success message with language confirmation
                 emit('connected', {
                     'message': 'Successfully connected to audio streaming service',
                     'user_id': user_id,
                     'auth_type': auth_type,
+                    'language': language,  # Confirm language to client
                     'timestamp': datetime.utcnow().isoformat()
                 }, namespace='/audio-stream')
 
