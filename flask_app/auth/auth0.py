@@ -176,13 +176,15 @@ def require_auth(f: Callable) -> Callable:
             # Verify and decode token
             payload = verify_jwt(token)
 
-            # Attach user info to request object
+            # Attach user info and token to request object
             request.user = payload
             request.user_id = payload.get('sub')
+            request.auth_token = token  # Store the validated token for reuse
 
             # Also store in Flask's g object for access in nested functions
             g.user = payload
             g.user_id = payload.get('sub')
+            g.auth_token = token  # Store token in g as well
 
             return f(*args, **kwargs)
 

@@ -362,6 +362,32 @@ class TestRequireAuthDecorator:
         assert data['user_id'] == 'auth0|123456789'
         assert data['user']['email'] == 'test@example.com'
     
+    @patch('flask_app.auth.auth0.verify_jwt')
+    def test_decorator_stores_token(self, mock_verify, app, mock_env, valid_token_payload):
+        """Test decorator stores validated token in request.auth_token."""
+        mock_verify.return_value = valid_token_payload
+        
+        # Create a test route that checks for auth_token
+        @app.route('/test-token-storage')
+        @require_auth
+        def test_token_storage():
+            from flask import request
+            return {
+                'has_auth_token': hasattr(request, 'auth_token'),
+                'token': request.auth_token if hasattr(request, 'auth_token') else None
+            }
+        
+        with app.test_client() as client:
+            response = client.get(
+                '/test-token-storage',
+                headers={'Authorization': 'Bearer test-token-123'}
+            )
+            
+            assert response.status_code == 200
+            data = response.get_json()
+            assert data['has_auth_token'] is True
+            assert data['token'] == 'test-token-123'
+    
     def test_decorator_without_token(self, client, mock_env):
         """Test decorator rejects request without token."""
         response = client.get('/test-protected')

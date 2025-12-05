@@ -1,6 +1,6 @@
 """Protected API routes requiring Auth0 authentication."""
 from flask import Blueprint, jsonify, request
-from flask_app.auth.auth0 import require_auth, get_user_info, get_token_from_header, Auth0Error
+from flask_app.auth.auth0 import require_auth, get_user_info, Auth0Error
 import logging
 
 logger = logging.getLogger(__name__)
@@ -73,14 +73,9 @@ def get_userinfo():
         }
     """
     try:
-        # Get token from Authorization header using centralized function
-        token = get_token_from_header()
-
-        if not token:
-            return jsonify({
-                'error': 'missing_token',
-                'message': 'Authorization token is required'
-            }), 401
+        # Use the token already validated by @require_auth decorator
+        # No need to extract it again from the header
+        token = request.auth_token
 
         # Fetch user info from Auth0
         user_info = get_user_info(token)
