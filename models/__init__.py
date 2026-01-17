@@ -16,3 +16,11 @@ def init_db(app):
     bcrypt.init_app(app)
     jwt.init_app(app)
     migrate.init_app(app, db)
+
+# Import models after db initialization to avoid circular imports
+from models.user import User, ApiKey, UsageLog
+from models.token_blacklist import TokenBlacklist
+from models.job import Job
+from models.artifact import Artifact
+
+__all__ = ['db', 'bcrypt', 'jwt', 'migrate', 'init_db', 'User', 'ApiKey', 'UsageLog', 'TokenBlacklist', 'Job', 'Artifact']

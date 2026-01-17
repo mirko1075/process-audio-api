@@ -83,7 +83,9 @@ paths:
   /auth/login:
     post:
       summary: User login
-      description: Authenticate user with email and password to receive JWT token
+      description: |
+        Authenticate user with email and password to receive JWT tokens.
+        Returns both an access token (expires in 1 hour) and a refresh token (expires in 30 days).
       tags:
         - Authentication
       security: []
@@ -120,7 +122,11 @@ paths:
                     example: "Login successful"
                   access_token:
                     type: string
-                    description: JWT access token
+                    description: JWT access token (expires in 1 hour)
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  refresh_token:
+                    type: string
+                    description: JWT refresh token (expires in 30 days)
                     example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
                   user:
                     $ref: '#/components/schemas/User'
@@ -256,156 +262,70 @@ paths:
                     type: string
                     example: "AI Medical Transcription Backend"
 
-  /mobile-auth/login:
+  /auth/refresh:
     post:
-      summary: Mobile app login
+      summary: Refresh JWT access token
       description: |
-        Authenticate a mobile user and generate a session token for WebSocket streaming.
-        **Note**: In demo mode, any username/password combination is accepted.
-        Session tokens expire after 24 hours.
+        Exchange a valid refresh token for a new access token.
+        Refresh token must be provided in the Authorization header as a Bearer token.
       tags:
-        - Mobile Authentication
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - username
-              properties:
-                username:
-                  type: string
-                  description: User identifier
-                  example: "mario_rossi"
-                password:
-                  type: string
-                  description: User password (optional in demo)
-                  example: "demo123"
+        - Authentication
+      security:
+        - BearerAuth: []
       responses:
         '200':
-          description: Login successful
+          description: New access token generated
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  auth_token:
+                  access_token:
                     type: string
-                    description: Session token for WebSocket authentication
-                    example: "session_XyJenG2Tj7UFLWs2g5FZ4jiHAQgz_C0z6ElME-bzOTY"
-                  user_id:
-                    type: string
-                    description: Normalized user identifier
-                    example: "mario_rossi"
-                  expires_at:
-                    type: string
-                    format: date-time
-                    description: Token expiration timestamp (ISO 8601)
-                    example: "2025-12-05T20:42:34.974864"
-                  message:
-                    type: string
-                    example: "Login successful"
-        '400':
-          description: Bad request - username missing
+                    description: New JWT access token
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Wrong token type (access token provided instead of refresh token)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /mobile-auth/verify:
+  /auth/logout:
     post:
-      summary: Verify session token
-      description: Check if a session token is valid and not expired
+      summary: Revoke JWT token (logout)
+      description: |
+        Revoke the current JWT token (access or refresh) by adding it to the blacklist.
+        The token will no longer be accepted for authentication after revocation.
+        Token must be provided in the Authorization header as a Bearer token.
       tags:
-        - Mobile Authentication
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - auth_token
-              properties:
-                auth_token:
-                  type: string
-                  description: Session token to verify
-                  example: "session_XyJenG2Tj7UFLWs2g5FZ4jiHAQgz_C0z6ElME-bzOTY"
+        - Authentication
+      security:
+        - BearerAuth: []
       responses:
         '200':
-          description: Token is valid
+          description: Token revoked successfully
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  valid:
-                    type: boolean
-                    example: true
-                  user_id:
+                  msg:
                     type: string
-                    example: "mario_rossi"
-                  username:
-                    type: string
-                    example: "Mario Rossi"
+                    description: Confirmation message
+                    example: "Access token revoked successfully"
         '401':
-          description: Token invalid or expired
+          description: Invalid or missing token
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  valid:
-                    type: boolean
-                    example: false
-                  message:
-                    type: string
-                    example: "Invalid token"
-
-  /mobile-auth/logout:
-    post:
-      summary: Logout user
-      description: Invalidate a session token
-      tags:
-        - Mobile Authentication
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - auth_token
-              properties:
-                auth_token:
-                  type: string
-                  description: Session token to invalidate
-                  example: "session_XyJenG2Tj7UFLWs2g5FZ4jiHAQgz_C0z6ElME-bzOTY"
-      responses:
-        '200':
-          description: Logout successful
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: "Logout successful"
-        '401':
-          description: Invalid token
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: "Invalid or expired token"
+                $ref: '#/components/schemas/ErrorResponse'
 
   /health:
     get:
@@ -425,6 +345,170 @@ paths:
                   status:
                     type: string
                     example: "ok"
+
+  /saas/jobs:
+    post:
+      summary: Create a new job
+      description: |
+        Create a new transcription or translation job.
+        The job will be created in 'queued' status.
+      tags:
+        - SaaS Jobs
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - type
+                - input_ref
+              properties:
+                type:
+                  type: string
+                  enum: [transcription, translation]
+                  description: Type of job to create
+                  example: "transcription"
+                input_ref:
+                  type: string
+                  description: Reference to input file or text (file key or text hash)
+                  example: "s3://bucket/audio/file123.wav"
+      responses:
+        '201':
+          description: Job created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '400':
+          description: Invalid request (missing or invalid fields)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      summary: List all jobs for the authenticated user
+      description: |
+        Retrieve all jobs belonging to the authenticated user.
+        Supports filtering by status and type, with pagination.
+      tags:
+        - SaaS Jobs
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [queued, processing, done, failed]
+          description: Filter jobs by status
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [transcription, translation]
+          description: Filter jobs by type
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+          description: Maximum number of results to return
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of results to skip for pagination
+      responses:
+        '200':
+          description: List of jobs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Job'
+                  total:
+                    type: integer
+                    description: Total number of jobs matching the filter
+                    example: 42
+                  limit:
+                    type: integer
+                    description: Limit applied to this response
+                    example: 100
+                  offset:
+                    type: integer
+                    description: Offset applied to this response
+                    example: 0
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /saas/jobs/{job_id}:
+    get:
+      summary: Get a specific job by ID
+      description: |
+        Retrieve details of a specific job.
+        Ownership is enforced - users can only retrieve their own jobs.
+      tags:
+        - SaaS Jobs
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Job ID
+      responses:
+        '200':
+          description: Job details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (job belongs to another user)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /transcriptions/deepgram:
     post:
@@ -1722,6 +1806,86 @@ components:
         required:
           - sentiment
 
+    Job:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Unique job identifier
+          example: 123
+        user_id:
+          type: string
+          description: User ID who owns this job
+          example: "auth0|123456789"
+        type:
+          type: string
+          enum: [transcription, translation]
+          description: Type of job
+          example: "transcription"
+        status:
+          type: string
+          enum: [queued, processing, done, failed]
+          description: Current status of the job
+          example: "done"
+        input_ref:
+          type: string
+          description: Reference to input file or text (file key or text hash)
+          example: "s3://bucket/audio/file123.wav"
+        error_message:
+          type: string
+          nullable: true
+          description: Error details if job failed
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          description: Job creation timestamp
+          example: "2023-10-16T19:35:02.584833"
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Job completion timestamp
+          example: "2023-10-16T19:45:12.123456"
+        artifacts:
+          type: array
+          description: Array of output artifacts produced by this job
+          items:
+            $ref: '#/components/schemas/Artifact'
+      required:
+        - id
+        - user_id
+        - type
+        - status
+        - input_ref
+        - created_at
+
+    Artifact:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Unique artifact identifier
+          example: 456
+        job_id:
+          type: integer
+          description: Job ID this artifact belongs to
+          example: 123
+        kind:
+          type: string
+          enum: [transcript, translation, srt, json]
+          description: Type of artifact
+          example: "transcript"
+        storage_ref:
+          type: string
+          description: Reference to stored artifact (file path, URL, or object storage key)
+          example: "s3://bucket/outputs/transcript_123.txt"
+      required:
+        - id
+        - job_id
+        - kind
+        - storage_ref
+
     ErrorResponse:
       type: object
       properties:
@@ -1745,10 +1909,10 @@ components:
 tags:
   - name: Health
     description: Health check endpoints
-  - name: Mobile Authentication
-    description: Mobile app authentication and session management
-  - name: Mobile Streaming
-    description: Real-time audio streaming and transcription via WebSocket
+  - name: Authentication
+    description: User authentication, JWT token management, and logout
+  - name: SaaS Jobs
+    description: Job persistence and retrieval for SaaS workflow
   - name: Transcription
     description: Audio transcription services
   - name: Translation
@@ -1777,13 +1941,14 @@ x-websocket-streaming:
     const socket = io('http://localhost:5000/audio-stream', {
       transports: ['websocket'],
       auth: {
-        token: 'your_session_token_from_login'
+        token: 'your_auth0_jwt_token'
       }
     });
     ```
 
     **Authentication:**
-    - Token must be obtained from POST /mobile-auth/login
+    - ONLY Auth0 JWT tokens are accepted
+    - Token must be obtained via Auth0 authentication flow
     - Pass token in `auth.token` parameter during connection
     - Connection will be rejected if token is invalid or expired
 
@@ -1902,20 +2067,17 @@ x-websocket-streaming:
 
     ## Complete Integration Flow
 
-    1. **Authenticate:**
+    1. **Authenticate via Auth0:**
        ```typescript
-       const response = await fetch('http://localhost:5000/mobile-auth/login', {
-         method: 'POST',
-         headers: {'Content-Type': 'application/json'},
-         body: JSON.stringify({username: 'user', password: 'pass'})
-       });
-       const {auth_token} = await response.json();
+       // Obtain Auth0 JWT token via Auth0 authentication flow
+       // (e.g., using Auth0 SDK or direct API calls)
+       const auth0_jwt_token = await authenticateWithAuth0();
        ```
 
     2. **Connect WebSocket:**
        ```typescript
        const socket = io('http://localhost:5000/audio-stream', {
-         auth: {token: auth_token}
+         auth: {token: auth0_jwt_token}
        });
        ```
 
@@ -1950,10 +2112,12 @@ x-websocket-streaming:
 
     7. **Logout (optional):**
        ```typescript
-       await fetch('http://localhost:5000/mobile-auth/logout', {
+       // Revoke JWT token
+       await fetch('http://localhost:5000/auth/logout', {
          method: 'POST',
-         headers: {'Content-Type': 'application/json'},
-         body: JSON.stringify({auth_token})
+         headers: {
+           'Authorization': `Bearer ${auth0_jwt_token}`
+         }
        });
        ```
 
@@ -2004,25 +2168,21 @@ x-websocket-streaming:
 
         const AudioStreamingScreen = () => {
           const [socket, setSocket] = useState(null);
-          const [authToken, setAuthToken] = useState('');
+          const [auth0Token, setAuth0Token] = useState('');
           const [finalTranscript, setFinalTranscript] = useState('');
           const [interimTranscript, setInterimTranscript] = useState('');
 
-          // 1. Login
+          // 1. Authenticate via Auth0
           const login = async () => {
-            const res = await fetch('http://localhost:5000/mobile-auth/login', {
-              method: 'POST',
-              headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({username: 'user', password: 'pass'})
-            });
-            const data = await res.json();
-            setAuthToken(data.auth_token);
+            // Use Auth0 SDK to authenticate
+            const token = await authenticateWithAuth0();
+            setAuth0Token(token);
           };
 
           // 2. Connect WebSocket
           const connect = () => {
             const newSocket = io('http://localhost:5000/audio-stream', {
-              auth: {token: authToken}
+              auth: {token: auth0Token}
             });
 
             newSocket.on('connected', (data) => console.log('Connected'));

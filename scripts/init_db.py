@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Database initialization script."""
+#!/usr/bin/env python3
+"""Database initialization script."""
 
 import os
 import sys
@@ -10,58 +12,62 @@ from datetime import datetime
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
+
 def is_safe_environment():
     """Check if it's safe to drop tables (development environment)."""
     flask_env = os.getenv('FLASK_ENV', '').lower()
     environment = os.getenv('ENVIRONMENT', '').lower()
-    
+
     # Consider safe if explicitly set to development
     safe_envs = ['development', 'dev', 'test', 'testing', 'local']
-    
+
     return flask_env in safe_envs or environment in safe_envs
+
 
 def confirm_destructive_action():
     """Ask user for confirmation before destructive database operations."""
     print("⚠️  WARNING: This will DELETE ALL existing data in the database!")
     print("   This action cannot be undone.")
     print()
-    
+
     response = input("Are you sure you want to continue? Type 'yes' to confirm: ").strip().lower()
     return response == 'yes'
+
 
 def create_tables_only():
     """Create tables without dropping existing ones (safe mode)."""
     try:
-        from flask_app import create_app
+        from core import create_app
         from models import db
-        
+
         app = create_app()
-        
+
         with app.app_context():
             print("🗄️  Creating database tables (safe mode - no data loss)...")
             db.create_all()
             print("✅ Database tables created successfully!")
-            
+
     except Exception as e:
         print(f"❌ Error creating tables: {str(e)}")
         return False
-    
+
     return True
+
 
 def init_database(force_drop=False):
     """Initialize database and create admin user.
-    
+
     Args:
         force_drop: If True, skip safety checks and force table dropping
     """
     try:
-        from flask_app import create_app
+        from core import create_app
         from models import db
         from models.user import User
-        
+
         # Create app with database support
         app = create_app()
-        
+
         with app.app_context():
             # Safety check for production environments
             if not force_drop:
@@ -76,19 +82,19 @@ def init_database(force_drop=False):
                     print("   2. Run with --safe to create tables without dropping existing data")
                     print("   3. Set FLASK_ENV=development or ENVIRONMENT=development")
                     return False
-                
+
                 if not confirm_destructive_action():
                     print("❌ Operation cancelled by user.")
                     return False
-            
+
             print("🗄️  Dropping existing tables...")
             db.drop_all()
-            
+
             print("🗄️  Creating database tables...")
             db.create_all()
-            
+
             print("👤 Creating admin user...")
-            
+
             # Check if admin user already exists
             existing_admin = User.query.filter_by(email='admin@example.com').first()
             if existing_admin:
@@ -103,13 +109,13 @@ def init_database(force_drop=False):
                     email_verified=True
                 )
                 admin_user.set_password('admin123')
-                
+
                 db.session.add(admin_user)
                 db.session.commit()
-                
+
                 # Generate admin API key
                 admin_api_key = admin_user.generate_api_key("Admin API Key")
-                
+
                 print("✅ Database initialized successfully!")
                 print()
                 print("🔑 Admin Credentials:")
@@ -122,29 +128,30 @@ def init_database(force_drop=False):
                 print("   2. Test auth endpoint: POST /auth/login")
                 print("   3. Create new users via: POST /auth/register")
                 print("   4. Use JWT or API keys for authentication")
-            
+
     except Exception as e:
         print(f"❌ Error initializing database: {str(e)}")
         return False
-    
+
     return True
+
 
 def create_test_user():
     """Create a test user for development."""
     try:
-        from flask_app import create_app
+        from core import create_app
         from models import db
         from models.user import User
-        
+
         app = create_app()
-        
+
         with app.app_context():
             # Check if test user exists
             test_user = User.query.filter_by(email='test@example.com').first()
             if test_user:
                 print("⚠️  Test user already exists")
                 return
-            
+
             print("👤 Creating test user...")
             test_user = User(
                 email='test@example.com',
@@ -155,24 +162,25 @@ def create_test_user():
                 email_verified=True
             )
             test_user.set_password('test1234')
-            
+
             db.session.add(test_user)
             db.session.commit()
-            
+
             # Generate test API key
             test_api_key = test_user.generate_api_key("Development API Key")
-            
+
             print("✅ Test user created!")
             print(f"   Email: test@example.com")
             print(f"   Password: test1234")
             print(f"   API Key: {test_api_key}")
-            
+
     except Exception as e:
         print(f"❌ Error creating test user: {str(e)}")
 
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    
+
     # Parse command line arguments
     if len(sys.argv) > 1:
         if sys.argv[1] == 'test-user':

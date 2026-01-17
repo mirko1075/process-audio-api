@@ -3,8 +3,8 @@ import pytest
 import tempfile
 import os
 from unittest.mock import Mock, patch, MagicMock
-from flask_app.services.video_transcription import VideoTranscriptionService
-from flask_app.clients.video_processor import VideoProcessor
+from core.services.video_transcription import VideoTranscriptionService
+from core.clients.video_processor import VideoProcessor
 from utils.exceptions import TranscriptionError
 
 
