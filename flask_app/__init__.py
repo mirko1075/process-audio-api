@@ -1,5 +1,6 @@
 """Flask application factory following Flask best practices."""
 import os
+from datetime import timedelta
 from flask import Flask
 from flask_cors import CORS
 from flask_socketio import SocketIO
@@ -39,12 +40,18 @@ def create_app(config_override: Optional[dict] = None) -> Tuple[Flask, SocketIO]
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     # JWT Configuration
-    app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-jwt-secret-key-change-in-production')
-    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False  # Tokens don't expire by default
+    app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
+    if not app.config['JWT_SECRET_KEY']:
+        raise RuntimeError("JWT_SECRET_KEY environment variable is required")
+
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
+    app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
     app.config['JWT_ALGORITHM'] = 'HS256'
 
     # Secret key for sessions
-    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-in-production')
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
+    if not app.config['SECRET_KEY']:
+        raise RuntimeError("SECRET_KEY environment variable is required")
 
     # Configure CORS
     CORS(app, origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -56,10 +63,19 @@ def create_app(config_override: Optional[dict] = None) -> Tuple[Flask, SocketIO]
     # Initialize database
     init_database(app)
 
-    # Initialize SocketIO with CORS support (for mobile streaming)
+    # Initialize JWT manager and token revocation checker
+    init_jwt_manager(app)
+
+    # Initialize SocketIO with CORS support
+    socketio_origins = os.getenv('SOCKETIO_ORIGINS', '')
+    if not socketio_origins:
+        raise RuntimeError("SOCKETIO_ORIGINS environment variable is required")
+
+    allowed_origins = [origin.strip() for origin in socketio_origins.split(',') if origin.strip()]
+
     socketio = SocketIO(
         app,
-        cors_allowed_origins="*",  # Allow all origins for WebSocket
+        cors_allowed_origins=allowed_origins,
         async_mode='eventlet',  # Must match gunicorn worker class
         logger=True,
         engineio_logger=False
@@ -104,6 +120,25 @@ def init_database(app: Flask) -> None:
         # Don't re-raise - allow app to start without database
 
 
+def init_jwt_manager(app: Flask) -> None:
+    """Initialize JWT manager and configure token revocation checking."""
+    from models import jwt
+    from models.token_blacklist import TokenBlacklist, db
+
+    # JWT manager is already initialized in models.init_db()
+    # Here we just configure the token revocation checker
+
+    @jwt.token_in_blocklist_loader
+    def check_if_token_revoked(jwt_header, jwt_payload):
+        """Check if a JWT token has been revoked."""
+        jti = jwt_payload['jti']
+        with app.app_context():
+            token = db.session.query(TokenBlacklist).filter_by(jti=jti).first()
+            return token is not None
+
+    logging.info("JWT manager configured with token revocation checking")
+
+
 def register_blueprints(app: Flask) -> None:
     """Register all application blueprints."""
     # Import blueprints here to avoid circular imports
@@ -112,6 +147,7 @@ def register_blueprints(app: Flask) -> None:
     from flask_app.api.translation import bp as translation_bp
     from flask_app.api.postprocessing import bp as postprocessing_bp
     from flask_app.api.utilities import bp as utilities_bp
+    from flask_app.api.token_refresh import bp as token_refresh_bp
 
     # Try to import web auth blueprint (from main branch)
     try:
@@ -121,14 +157,17 @@ def register_blueprints(app: Flask) -> None:
     except ImportError:
         logging.warning("Web authentication blueprint not found, skipping")
 
-    # Try to import mobile auth blueprint (our addition)
+    # Try to import Auth0 protected routes blueprint
     try:
-        from flask_app.api.auth import bp as mobile_auth_bp
-        # Register with different prefix to avoid conflicts
-        app.register_blueprint(mobile_auth_bp, url_prefix='/mobile-auth', name='mobile_auth')
-        logging.info("Mobile authentication blueprint registered")
+        from flask_app.api.protected import bp as protected_bp
+        app.register_blueprint(protected_bp)
+        logging.info("Auth0 protected routes blueprint registered")
     except ImportError:
-        logging.warning("Mobile authentication blueprint not found, skipping")
+        logging.warning("Auth0 protected routes blueprint not found, skipping")
+
+    # Register JWT token refresh/logout endpoints
+    app.register_blueprint(token_refresh_bp)
+    logging.info("Token refresh blueprint registered")
 
     # Register other blueprints with appropriate URL prefixes
     app.register_blueprint(health_bp)
@@ -140,12 +179,14 @@ def register_blueprints(app: Flask) -> None:
 
 def register_socketio_handlers(socketio: SocketIO) -> None:
     """Register WebSocket event handlers."""
+    # Register Auth0-enabled WebSocket handlers (REQUIRED)
     try:
-        from flask_app.sockets.audio_stream import init_audio_stream_handlers
+        from flask_app.sockets.audio_stream_auth0 import init_audio_stream_handlers
         init_audio_stream_handlers(socketio)
-        logging.info("WebSocket handlers registered successfully")
+        logging.info("WebSocket handlers (Auth0-enabled) registered successfully")
     except ImportError as e:
-        logging.warning(f"WebSocket handlers not found: {e}")
+        logging.error(f"Auth0 WebSocket handlers not found: {e}")
+        raise RuntimeError("WebSocket handlers are required but could not be loaded")
 
 
 def register_error_handlers(app: Flask) -> None:
@@ -153,6 +194,14 @@ def register_error_handlers(app: Flask) -> None:
     from flask import jsonify
     from werkzeug.exceptions import HTTPException
     from utils.exceptions import TranslationError, TranscriptionError
+
+    # Register Auth0 error handlers
+    try:
+        from flask_app.auth.auth0 import register_auth_error_handlers
+        register_auth_error_handlers(app)
+        logging.info("Auth0 error handlers registered")
+    except ImportError:
+        logging.warning("Auth0 error handlers not found, skipping")
 
     @app.errorhandler(400)
     def bad_request(error):

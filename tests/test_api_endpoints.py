@@ -14,7 +14,7 @@ def client(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-deepseek-key")
     monkeypatch.setenv("FLASK_ENV", "testing")
 
-    from flask_app import create_app
+    from core import create_app
     app, socketio = create_app()
     app.config['TESTING'] = True
     

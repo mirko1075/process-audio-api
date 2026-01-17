@@ -16,7 +16,7 @@ def mock_env(monkeypatch):
 
 def test_openai_client_initialization(mock_env):
     """Test OpenAI client can be initialized with proper configuration."""
-    from flask_app.clients.openai import OpenAIClient
+    from core.clients.openai import OpenAIClient
     
     try:
         client = OpenAIClient()
@@ -32,7 +32,7 @@ def test_openai_client_initialization(mock_env):
 def test_deepgram_client_initialization(mock_env):
     """Test Deepgram client can be initialized."""
     try:
-        from flask_app.clients.deepgram import DeepgramClient
+    from core.clients.deepgram import DeepgramClient
         client = DeepgramClient()
         assert client is not None
     except ImportError:
@@ -45,7 +45,7 @@ def test_deepgram_client_initialization(mock_env):
 
 def test_text_chunking_functionality(mock_env):
     """Test text chunking functionality without API calls."""
-    from flask_app.clients.openai import OpenAIClient
+    from core.clients.openai import OpenAIClient
     
     try:
         client = OpenAIClient()
@@ -72,7 +72,7 @@ def test_text_chunking_functionality(mock_env):
 def test_tokenizer_functionality(mock_env):
     """Test tokenizer functionality without API calls."""
     try:
-        from flask_app.clients.openai import OpenAIClient
+    from core.clients.openai import OpenAIClient
         client = OpenAIClient()
         
         if hasattr(client, '_tokenizer'):
@@ -97,7 +97,7 @@ def test_tokenizer_functionality(mock_env):
 def test_openai_client_timeout_configuration(mock_openai, mock_env):
     """Test that OpenAI client initialization works with timeout configuration."""
     try:
-        from flask_app.clients.openai import OpenAIClient
+    from core.clients.openai import OpenAIClient
         
         # Mock OpenAI client to avoid actual API calls
         mock_openai.return_value = Mock()
@@ -121,7 +121,7 @@ def test_error_handling_initialization():
         del os.environ['OPENAI_API_KEY']
     
     try:
-        from flask_app.clients.openai import OpenAIClient
+    from core.clients.openai import OpenAIClient
         client = OpenAIClient()
         # If no exception is raised, the client might have fallback behavior
         # which is also acceptable
