@@ -11,18 +11,62 @@ services:
         value: 3.11.0
       - key: FLASK_ENV
         value: production
-      - key: DATABASE_URL
+      - key: WEB_CONCURRENCY
+        value: 2
+
+      # Core Authentication
+      - key: API_KEY
         sync: false
+      - key: SECRET_KEY
+        generateValue: true
       - key: JWT_SECRET_KEY
         generateValue: true
+
+      # Auth0 Configuration
+      - key: AUTH0_DOMAIN
+        sync: false
+      - key: AUTH0_CLIENT_ID
+        sync: false
+      - key: AUTH0_CLIENT_SECRET
+        sync: false
+      - key: AUTH0_AUDIENCE
+        sync: false
+
+      # Database
+      - key: DATABASE_URL
+        sync: false
+
+      # Deepgram Configuration
       - key: DEEPGRAM_API_KEY
         sync: false
+      - key: DEEPGRAM_API_URL
+        value: https://api.deepgram.com/v1/listen
+      - key: DEEPGRAM_API_SENTIMENT_URL
+        value: https://api.deepgram.com/v1/read
+
+      # OpenAI
       - key: OPENAI_API_KEY
         sync: false
+
+      # AssemblyAI Configuration
       - key: ASSEMBLYAI_API_KEY
         sync: false
+      - key: UPLOAD_URL
+        value: https://api.assemblyai.com/v2/upload
+      - key: TRANSCRIBE_URL
+        value: https://api.assemblyai.com/v2/transcript
+
+      # DeepL Translation
+      - key: DEEPL_API_KEY
+        sync: false
+      - key: DEEPL_API_URL
+        value: https://api-free.deepl.com/v2/translate
+
+      # DeepSeek
       - key: DEEPSEEK_API_KEY
         sync: false
+
+      # Google Cloud
       - key: GOOGLE_APPLICATION_CREDENTIALS
         sync: false
     healthCheckPath: /health
