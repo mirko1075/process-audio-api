@@ -1,9 +1,8 @@
-Step 1 — Chiudere i buchi blocking SaaS (non tutto il security backlog)
+# Step 1 — Chiudere i buchi blocking SaaS (non tutto il security backlog)
 
-Dal documento di hardening, NON serve fare tutto ora 
+Dal documento di hardening, NON serve fare tutto ora
 
 security-hardening-todo
-
 
 Serve fare solo ciò che blocca la monetizzazione.
 
@@ -41,6 +40,7 @@ usage_logs
 
 Tabelle da aggiungere (solo 2)
 jobs
+
 - id
 - user_id
 - type (transcription | translation | stream)
@@ -50,11 +50,11 @@ jobs
 - completed_at
 
 artifacts
+
 - id
 - job_id
 - kind (transcript | translation | srt | json)
 - storage_ref
-
 
 ❗ Nota importante:
 NON duplicare dati. Il DB è solo indice + stato.
@@ -98,7 +98,6 @@ GET    /saas/jobs
 GET    /saas/jobs/:id
 DELETE /saas/jobs/:id
 
-
 Internamente:
 
 validi quota
@@ -107,7 +106,7 @@ chiami gli endpoint che già esistono
 
 registri usage (già fatto)
 
-Questo è coerente con l’architettura che hai documentato 
+Questo è coerente con l’architettura che hai documentato
 
 architecture
 
@@ -153,10 +152,9 @@ single worker
 
 pipeline Deepgram / Whisper
 
-Il tuo runbook mostra che sai operare il sistema così com’è 
+Il tuo runbook mostra che sai operare il sistema così com’è
 
 runbook
-
 
 Non romperlo prima di avere utenti paganti.
 

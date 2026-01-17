@@ -1,8 +1,6 @@
 """WebSocket handler for real-time audio streaming with Auth0 authentication.
 
-This module provides WebSocket handlers that support BOTH:
-1. Auth0 JWT tokens (primary)
-2. Session tokens (fallback for mobile app compatibility)
+This module provides WebSocket handlers using Auth0 JWT tokens for authentication.
 
 Features:
 - Dynamic language selection via query parameter
@@ -20,8 +18,7 @@ from deepgram import (
     LiveOptions
 )
 from utils.config import get_app_config
-from flask_app.auth.auth0 import verify_websocket_token, Auth0Error, ALLOW_INSECURE_SESSION_AUTH
-from flask_app.api.auth import is_valid_session, get_session_info
+from flask_app.auth.auth0 import verify_websocket_token, Auth0Error
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +64,7 @@ active_connections = {}
 
 
 def authenticate_websocket(auth: dict) -> dict:
-    """Authenticate WebSocket connection with Auth0 JWT (required in production).
-
-    In production, ONLY Auth0 JWT tokens are accepted for security.
-    Session token fallback is available ONLY when ALLOW_INSECURE_SESSION_AUTH=true
-    (development/testing only).
+    """Authenticate WebSocket connection using Auth0 JWT only.
 
     Args:
         auth: Authentication dict from SocketIO connection
@@ -87,45 +80,17 @@ def authenticate_websocket(auth: dict) -> dict:
 
     token = auth['token']
 
-    # Try Auth0 JWT first (REQUIRED in production)
     try:
         payload = verify_websocket_token(token)
         return {
             'user_id': payload.get('sub'),
-            'email': payload.get('email'),
+            'email': payload.get('email', payload.get('sub')),
             'auth_type': 'auth0',
             'payload': payload
         }
     except Auth0Error as e:
-        logger.debug(f"Auth0 JWT verification failed: {e.message}")
-
-    # Fallback to session token ONLY if explicitly enabled (DEV ONLY)
-    if ALLOW_INSECURE_SESSION_AUTH:
-        logger.warning(
-            "⚠️  Using insecure session token fallback - this should NOT be enabled in production!"
-        )
-        try:
-            if is_valid_session(token):
-                session_info = get_session_info(token)
-                return {
-                    'user_id': session_info['user_id'],
-                    'username': session_info.get('username'),
-                    'auth_type': 'session',
-                    'payload': session_info
-                }
-        except Exception as e:
-            logger.debug(f"Session token verification failed: {e}")
-    else:
-        logger.info(
-            "Session token fallback disabled (secure mode). "
-            "Only Auth0 JWT tokens are accepted."
-        )
-
-    # Authentication failed
-    raise Exception(
-        "Invalid or expired authentication token. "
-        "Please provide a valid Auth0 JWT token."
-    )
+        logger.error(f"WebSocket authentication failed: {e.message}")
+        raise Exception(f"Invalid or expired authentication token: {e.message}")
 
 
 def init_audio_stream_handlers(socketio):

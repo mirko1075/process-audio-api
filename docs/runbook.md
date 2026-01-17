@@ -11,7 +11,8 @@ This runbook provides step-by-step debugging procedures for common failure scena
 1. [How to Debug a Failed Transcription](#1-how-to-debug-a-failed-transcription)
 2. [How to Debug a Failed Translation](#2-how-to-debug-a-failed-translation)
 3. [How to Debug WebSocket Audio Streaming](#3-how-to-debug-websocket-audio-streaming)
-4. [Common Failure Modes](#4-common-failure-modes)
+4. [How to Debug JWT Authentication Issues](#4-how-to-debug-jwt-authentication-issues)
+5. [Common Failure Modes](#5-common-failure-modes)
 
 ---
 
@@ -434,13 +435,12 @@ curl -X POST https://yourapp.onrender.com/translations/deepseek \
 # Check Render logs for handler registration:
 
 Pattern: "WebSocket handlers (Auth0-enabled) registered successfully"
-→ Using audio_stream_auth0.py (PREFERRED)
-
-Pattern: "WebSocket handlers (session-based) registered successfully"
-→ Using audio_stream.py (DEPRECATED)
+→ Using audio_stream_auth0.py (Auth0 JWT only)
 
 Pattern: "WebSocket handlers not found: ..."
 → No handler registered (critical failure)
+
+Note: Session-based WebSocket handler (audio_stream.py) removed as of Step 1 Security Hardening (2026-01-17)
 ```
 
 #### Step 2: Test Connection Handshake
@@ -475,38 +475,55 @@ echo "<JWT_TOKEN>" | cut -d'.' -f2 | base64 -d | jq .
 • "aud": "<AUTH0_AUDIENCE>"  (matches AUTH0_AUDIENCE env var)
 • "exp": <timestamp>  (not expired: exp > current Unix time)
 • "sub": "auth0|123"  (user ID present)
+• "jti": "<unique_token_id>"  (JWT ID for revocation tracking)
 
 # Common failures:
-1. Token expired → Client needs to refresh token
+1. Token expired → Client needs to refresh token via POST /auth/refresh
 2. Wrong audience → AUTH0_AUDIENCE mismatch
 3. Invalid signature → JWKS key rotation issue (clear PyJWKClient cache - restart service)
+4. Token revoked → Check token_blacklist table for this jti
 ```
 
-##### Session Token Validation (Deprecated)
+##### JWT Token Expiration and Refresh
 ```bash
-# Only works if ALLOW_INSECURE_SESSION_AUTH=true
+# Access token expiration: 1 hour
+# Refresh token expiration: 30 days
 
-# Check Render logs:
-"⚠️ SECURITY WARNING: ALLOW_INSECURE_SESSION_AUTH is enabled"
-→ Session fallback active (BAD in production)
+# If client gets 401 "Token has expired":
+1. Client should call POST /auth/refresh with refresh token
+2. Server returns new access token (valid for 1 hour)
+3. Client uses new access token for subsequent requests
 
-"Session token fallback disabled (secure mode)"
-→ Session tokens rejected (GOOD in production)
+# Test refresh endpoint:
+curl -X POST https://yourapp.onrender.com/auth/refresh \
+  -H "Authorization: Bearer <REFRESH_TOKEN>"
 
-# Test session token:
-# First login to get token:
-curl -X POST https://yourapp.onrender.com/mobile-auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "testuser", "password": "ignored"}'  # NO PASSWORD CHECK!
+# Expected success:
+{"access_token": "<NEW_ACCESS_TOKEN>"}
 
-# Response:
-{"auth_token": "session_xyz123", "user_id": "testuser", "expires_at": "..."}
+# Expected failure (expired refresh token):
+{"msg": "Token has expired"}
+→ Client must re-authenticate via Auth0 login flow
 
-# Then use in WebSocket:
-wscat -c "wss://yourapp.onrender.com/audio-stream?lang=en" \
-  --connect-option '{"auth": {"token": "session_xyz123"}}'
+# Test logout (revoke token):
+curl -X POST https://yourapp.onrender.com/auth/logout \
+  -H "Authorization: Bearer <ACCESS_OR_REFRESH_TOKEN>"
 
-# Note: Session tokens stored in-memory (lost on restart)
+# Expected:
+{"msg": "Access token revoked successfully"}
+# OR
+{"msg": "Refresh token revoked successfully"}
+
+# Verify revocation in database:
+psql $DATABASE_URL -c "SELECT jti, token_type, revoked_at FROM token_blacklist ORDER BY revoked_at DESC LIMIT 5;"
+```
+
+##### Session Token Validation (REMOVED)
+```bash
+# Session authentication removed as of Step 1 Security Hardening (2026-01-17)
+# All /mobile-auth/* endpoints deleted
+# ALLOW_INSECURE_SESSION_AUTH environment variable no longer supported
+# WebSocket now requires Auth0 JWT only
 ```
 
 #### Step 4: Check Deepgram Integration
@@ -599,7 +616,8 @@ en, es, fr, it, de, pt, nl, hi, ja, ko, zh, sv, no, da, fi, pl, ru, tr, ar, el, 
 | Error | Cause | Fix |
 |-------|-------|-----|
 | "Connection rejected: No authentication token provided" | Client didn't send `auth: {token}` | Add auth parameter to SocketIO connection |
-| "Connection rejected: Invalid or expired authentication token" | JWT expired or invalid | Client needs to refresh Auth0 token |
+| "Connection rejected: Invalid or expired authentication token" | JWT expired or invalid | Client needs to refresh token via POST /auth/refresh |
+| "Connection rejected: Token has been revoked" | Token in blacklist (user logged out) | Client must re-authenticate via Auth0 login flow |
 | "Transcription service error" | Deepgram API failure | Check DEEPGRAM_API_KEY, Deepgram status |
 | "Invalid audio data format" | Base64 decode failed | Verify audio_chunk is valid Base64 string |
 | "Connection not initialized" | Client sent audio before receiving 'connected' event | Wait for 'connected' before sending chunks |
@@ -618,7 +636,206 @@ en, es, fr, it, de, pt, nl, hi, ja, ko, zh, sv, no, da, fi, pl, ru, tr, ar, el, 
 
 ---
 
-## 4. Common Failure Modes
+## 4. How to Debug JWT Authentication Issues
+
+### Symptoms
+- 401 "Token has expired" errors
+- 422 "Token signature verification failed" errors
+- Client unable to refresh access token
+- Logout (token revocation) not working
+
+### Investigation Steps
+
+#### Step 1: Verify Environment Variables
+```bash
+# Check Render Dashboard → Environment:
+JWT_SECRET_KEY = *********** (set? REQUIRED - app crashes if missing)
+SECRET_KEY = *********** (set? REQUIRED - app crashes if missing)
+AUTH0_DOMAIN = *********** (set?)
+AUTH0_AUDIENCE = *********** (set?)
+
+# If any are missing, app will crash at startup with:
+RuntimeError: JWT_SECRET_KEY environment variable is required
+RuntimeError: SECRET_KEY environment variable is required
+```
+
+#### Step 2: Check Token Expiration Configuration
+```bash
+# Verify JWT expiration settings in logs at startup:
+# Look for log messages from flask_app/__init__.py:
+
+Pattern: "JWT_ACCESS_TOKEN_EXPIRES = 1 hour"
+→ Access tokens configured correctly
+
+Pattern: "JWT_REFRESH_TOKEN_EXPIRES = 30 days"
+→ Refresh tokens configured correctly
+
+# If not found, check flask_app/__init__.py:
+# Should have:
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
+app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
+```
+
+#### Step 3: Test Token Refresh Flow
+```bash
+# Step 1: Get initial tokens from Auth0 login
+# (Use your frontend login flow or Auth0 dashboard test)
+
+# Step 2: Test access token works
+curl -X GET https://yourapp.onrender.com/api/me \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+
+# Expected: User info returned
+
+# Step 3: Wait >1 hour or force expiration, then test refresh
+curl -X POST https://yourapp.onrender.com/auth/refresh \
+  -H "Authorization: Bearer <REFRESH_TOKEN>"
+
+# Expected success:
+{
+  "access_token": "<NEW_ACCESS_TOKEN>"
+}
+
+# Expected failure (if refresh token also expired):
+{
+  "msg": "Token has expired"
+}
+
+# Expected failure (if refresh token revoked):
+{
+  "msg": "Token has been revoked"
+}
+
+# Step 4: Verify new access token works
+curl -X GET https://yourapp.onrender.com/api/me \
+  -H "Authorization: Bearer <NEW_ACCESS_TOKEN>"
+```
+
+#### Step 4: Test Token Revocation (Logout)
+```bash
+# Logout with access token:
+curl -X POST https://yourapp.onrender.com/auth/logout \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+
+# Expected:
+{"msg": "Access token revoked successfully"}
+
+# Verify token is blacklisted:
+psql $DATABASE_URL -c "SELECT * FROM token_blacklist ORDER BY revoked_at DESC LIMIT 1;"
+
+# Expected output:
+ id |        jti        | token_type | user_id |      revoked_at      |      expires_at
+----+-------------------+------------+---------+----------------------+---------------------
+  1 | abc-123-def-456   | access     | auth0|x | 2026-01-17 10:30:00  | 2026-01-17 11:30:00
+
+# Try to use revoked token:
+curl -X GET https://yourapp.onrender.com/api/me \
+  -H "Authorization: Bearer <REVOKED_ACCESS_TOKEN>"
+
+# Expected:
+{"msg": "Token has been revoked"}
+```
+
+#### Step 5: Check Token Blacklist Table
+```bash
+# Verify token_blacklist table exists:
+psql $DATABASE_URL -c "\dt token_blacklist"
+
+# Expected:
+            List of relations
+ Schema |      Name       | Type  |  Owner
+--------+-----------------+-------+---------
+ public | token_blacklist | table | postgres
+
+# If table doesn't exist, run migration:
+python scripts/migrate_add_token_blacklist.py
+
+# Check blacklist entries:
+psql $DATABASE_URL -c "SELECT COUNT(*) FROM token_blacklist;"
+
+# If count > 10000, consider cleanup job to delete expired entries
+```
+
+#### Step 6: Troubleshoot Common JWT Errors
+
+##### Error: "Token has expired"
+```bash
+# Cause: Access token expired (> 1 hour old) or refresh token expired (> 30 days old)
+
+# Fix for client:
+1. If access token expired: Call POST /auth/refresh with refresh token
+2. If refresh token expired: Re-authenticate via Auth0 login flow
+3. Implement automatic token refresh in client (refresh when exp - now < 5 minutes)
+```
+
+##### Error: "Token has been revoked"
+```bash
+# Cause: User called POST /auth/logout and token is in blacklist
+
+# Fix for client:
+1. Clear local token storage
+2. Redirect to login page
+3. User must re-authenticate via Auth0
+
+# Debug server-side:
+psql $DATABASE_URL -c "SELECT * FROM token_blacklist WHERE jti = '<TOKEN_JTI>';"
+# If entry exists, token was deliberately revoked
+```
+
+##### Error: "Signature verification failed"
+```bash
+# Cause: JWT_SECRET_KEY mismatch or token corrupted
+
+# Fix:
+1. Verify JWT_SECRET_KEY not changed recently (check Render deploy history)
+2. If changed, all existing tokens are invalid - users must re-login
+3. Check token format: Should be xxx.yyy.zzz (3 parts separated by dots)
+4. Decode token at jwt.io to verify structure
+```
+
+##### Error: "Missing Authorization Header"
+```bash
+# Cause: Client not sending Authorization: Bearer <token>
+
+# Fix for client:
+1. Add header: Authorization: Bearer <access_token>
+2. For refresh endpoint: Use refresh_token not access_token
+3. Check client code sends header for ALL protected endpoints
+```
+
+#### Step 7: Monitor Token Blacklist Growth
+```bash
+# Check blacklist size:
+psql $DATABASE_URL -c "SELECT COUNT(*) as total, token_type, COUNT(*) FROM token_blacklist GROUP BY token_type;"
+
+# Expected output:
+ total | token_type | count
+-------+------------+-------
+   150 | access     |   100
+       | refresh    |    50
+
+# If total > 50000, implement cleanup job:
+# Delete tokens where expires_at < NOW() - INTERVAL '7 days'
+psql $DATABASE_URL -c "DELETE FROM token_blacklist WHERE expires_at < NOW() - INTERVAL '7 days';"
+
+# Add to cron or scheduled task (future enhancement)
+```
+
+### Resolution Patterns
+
+| Error | Root Cause | Fix |
+|-------|-----------|-----|
+| "JWT_SECRET_KEY environment variable is required" | Missing config | Set JWT_SECRET_KEY in Render dashboard, redeploy |
+| "Token has expired" (access token) | > 1 hour old | Client calls POST /auth/refresh with refresh token |
+| "Token has expired" (refresh token) | > 30 days old | User must re-authenticate via Auth0 login |
+| "Token has been revoked" | User logged out | Client clears tokens, redirects to login |
+| "Signature verification failed" | JWT_SECRET_KEY changed | All users must re-login (tokens invalidated) |
+| token_blacklist table missing | Migration not run | Run `python scripts/migrate_add_token_blacklist.py` |
+| Blacklist growing unbounded | No cleanup job | Implement periodic DELETE of expired tokens |
+
+---
+
+## 5. Common Failure Modes
 
 ### Database Connection Failures
 
@@ -953,14 +1170,16 @@ CORS_ORIGINS = https://meeting-streamer.vercel.app,http://localhost:3000
 - [ ] Review Render logs for WARNING/ERROR patterns
 - [ ] Check external service usage (Deepgram, OpenAI, DeepSeek quotas)
 - [ ] Verify database backups are running (Render automated backups)
-- [ ] Monitor session count (if ALLOW_INSECURE_SESSION_AUTH=true): `session_manager.get_session_count()`
-- [ ] Run session cleanup (if using sessions): `session_manager.cleanup_expired_sessions()`
+- [ ] Monitor token blacklist size: `psql $DATABASE_URL -c "SELECT COUNT(*) FROM token_blacklist;"`
+- [ ] Check for expired tokens: `psql $DATABASE_URL -c "SELECT COUNT(*) FROM token_blacklist WHERE expires_at < NOW();"`
 
 ### Monthly
 - [ ] Review and rotate API keys (if leaked)
 - [ ] Update dependencies (security patches)
 - [ ] Review Auth0 user logs for anomalies
 - [ ] Database cleanup (old UsageLog entries if > 1M rows)
+- [ ] Token blacklist cleanup: Delete expired tokens older than 7 days
+- [ ] Verify JWT expiration configuration hasn't changed
 
 ### Quarterly
 - [ ] Audit user permissions (active API keys)

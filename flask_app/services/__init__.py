@@ -1,4 +1,3 @@
-"""Services module for business logic and session management."""
-from flask_app.services.session_manager import get_session_manager, SessionManager
+"""Services module for business logic."""
 
-__all__ = ['get_session_manager', 'SessionManager']
+__all__ = []

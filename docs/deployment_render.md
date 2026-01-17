@@ -91,8 +91,9 @@ healthCheckPath: /health
 | `OPENAI_API_KEY` | OpenAI API key (Whisper, GPT) | Render Dashboard → Environment | **Required**. Missing = config load failure at startup. |
 | `DEEPSEEK_API_KEY` | DeepSeek API key for translation | Render Dashboard → Environment | **Required** by DeepSeekClient. Missing = ValueError on service init. |
 | `DATABASE_URL` | PostgreSQL connection string | Auto-injected if using Render PostgreSQL service | **Required** for production. Format: `postgresql://user:pass@host:5432/dbname?sslmode=require` |
-| `JWT_SECRET_KEY` | Flask-JWT-Extended signing key | `generateValue: true` in render.yaml (auto-generated) | **Auto-generated** on first deploy. Rotate manually if compromised. |
-| `SECRET_KEY` | Flask session secret | Manual entry | **Must set manually**. Default is insecure placeholder. |
+| `JWT_SECRET_KEY` | Flask-JWT-Extended signing key | Manual entry | **REQUIRED**. App crashes at startup if missing: `RuntimeError: JWT_SECRET_KEY environment variable is required` |
+| `SECRET_KEY` | Flask session secret | Manual entry | **REQUIRED**. App crashes at startup if missing: `RuntimeError: SECRET_KEY environment variable is required` |
+| `SOCKETIO_ORIGINS` | WebSocket CORS allowlist (comma-separated) | Manual entry | **REQUIRED**. App crashes at startup if missing: `RuntimeError: SOCKETIO_ORIGINS environment variable is required`. Example: `https://yourdomain.com,https://app.yourdomain.com` |
 
 ### **Optional Secrets**
 | Variable | Purpose | Default if Missing |
@@ -107,7 +108,6 @@ healthCheckPath: /health
 | `FLASK_ENV` | `production` | Disables debug mode, uses production error handling |
 | `FLASK_APP` | `app.py` | Entry point hint (not critical for gunicorn) |
 | `AUTH0_REQUEST_TIMEOUT` | `30` | Timeout for Auth0 userinfo API calls (seconds) |
-| `ALLOW_INSECURE_SESSION_AUTH` | `false` | **CRITICAL SECURITY:** Blocks deprecated /mobile-auth endpoints. **NEVER set to `true` in production.** |
 | `CORS_ORIGINS` | `https://meeting-streamer.vercel.app/` | CORS allowed origins (comma-separated) |
 | `LOG_LEVEL` | `INFO` | Logging verbosity (DEBUG/INFO/WARNING/ERROR) |
 | `PORT` | (Auto-injected by Render) | HTTP bind port |
@@ -196,14 +196,17 @@ healthCheckPath: /health
 | Log Pattern | Meaning | Action |
 |-------------|---------|--------|
 | `Token verified successfully for user: auth0\|123` | Auth0 JWT auth success | Normal |
-| `JWT verification failed: Token has expired` | Expired token | Client needs to refresh token |
-| `⚠️ SECURITY WARNING: ALLOW_INSECURE_SESSION_AUTH is enabled` | Insecure auth enabled | **FIX IMMEDIATELY** (set to `false`) |
+| `JWT verification failed: Token has expired` | Expired token | Client needs to refresh via POST /auth/refresh |
+| `Token has been revoked` | Revoked token in blacklist | Client logged out - must re-authenticate |
+| `JWT_ACCESS_TOKEN_EXPIRES = 1 hour` | JWT config logged at startup | Normal - confirms 1h access token expiration |
+| `JWT_REFRESH_TOKEN_EXPIRES = 30 days` | JWT config logged at startup | Normal - confirms 30d refresh token expiration |
 | `WebSocket connected: user_id=X, auth_type=auth0` | SocketIO connection established | Normal |
 | `Deepgram error: ...` | Transcription service failure | Check Deepgram API status, key validity |
 | `Database initialization failed: ...` | DB connection error at startup | Check `DATABASE_URL`, PostgreSQL status |
-| `Connection rejected: Invalid or expired authentication token` | WebSocket auth failure | Client needs valid Auth0 token |
+| `Connection rejected: Invalid or expired authentication token` | WebSocket auth failure | Client needs valid Auth0 token or refresh |
+| `RuntimeError: JWT_SECRET_KEY environment variable is required` | Missing secret at startup | **FIX IMMEDIATELY** - set env var, redeploy |
+| `RuntimeError: SOCKETIO_ORIGINS environment variable is required` | Missing CORS config at startup | **FIX IMMEDIATELY** - set env var, redeploy |
 | `Health check requested` | Render health ping | Normal (every 30s) |
-| `Session created for user: X` | Session token created (when ALLOW_INSECURE_SESSION_AUTH=true) | Should NOT occur in production |
 
 ### **Error Logging**
 - **Application errors:** Logged via Python `logging` module (level: INFO default)
@@ -287,9 +290,9 @@ git push origin main
 - [ ] `OPENAI_API_KEY` = `<openai_key>`
 - [ ] `DEEPSEEK_API_KEY` = `<deepseek_key>`
 - [ ] `DATABASE_URL` = Auto-injected OR manual with `?sslmode=require`
-- [ ] `JWT_SECRET_KEY` = Auto-generated on first deploy
-- [ ] `SECRET_KEY` = Strong random value (not default placeholder)
-- [ ] `ALLOW_INSECURE_SESSION_AUTH` = `false` (verify in render.yaml)
+- [ ] `JWT_SECRET_KEY` = Strong random value (generate with: `python -c "import secrets; print(secrets.token_urlsafe(32))"`)
+- [ ] `SECRET_KEY` = Strong random value (generate with same command as JWT_SECRET_KEY)
+- [ ] `SOCKETIO_ORIGINS` = Comma-separated allowlist (e.g., `https://yourdomain.com,https://app.yourdomain.com`)
 
 ### **Optional Variables**
 - [ ] `ASSEMBLYAI_API_KEY` (if using AssemblyAI)
@@ -329,7 +332,10 @@ git push origin main
 | Transcription endpoints fail | Missing `DEEPGRAM_API_KEY` or `OPENAI_API_KEY` | Set API keys |
 | DeepSeek translation fails | Missing `DEEPSEEK_API_KEY` | Set API key in dashboard |
 | CORS errors from frontend | Incorrect `CORS_ORIGINS` | Update to match frontend URL |
-| "ALLOW_INSECURE_SESSION_AUTH" warning in logs | Security flag not set to `false` | Verify render.yaml, redeploy |
+| WebSocket CORS errors | Missing or wrong `SOCKETIO_ORIGINS` | Set comma-separated allowlist in dashboard |
+| "RuntimeError: JWT_SECRET_KEY environment variable is required" | Missing JWT secret | Set `JWT_SECRET_KEY` in dashboard, redeploy |
+| "RuntimeError: SOCKETIO_ORIGINS environment variable is required" | Missing WebSocket CORS config | Set `SOCKETIO_ORIGINS` in dashboard, redeploy |
+| Token revocation not working | `token_blacklist` table missing | Run migration: `python scripts/migrate_add_token_blacklist.py` |
 
 ---
 
@@ -338,15 +344,15 @@ git push origin main
 ### **Current Bottlenecks**
 1. **Single worker:** `-w 1` limits concurrency (one request at a time blocks)
 2. **In-memory connection state:** SocketIO `active_connections` dict not shared across workers
-3. **In-memory session storage:** SessionManager dict not shared across workers or persistent
-4. **Synchronous external API calls:** Deepgram, OpenAI calls block gunicorn worker
+3. **Synchronous external API calls:** Deepgram, OpenAI calls block gunicorn worker
+4. **Token blacklist growth:** `token_blacklist` table grows unbounded without cleanup job
 
 ### **Scaling Recommendations**
 1. **Horizontal Scaling (Multiple Instances):**
    - Requires Redis for SocketIO message queue (`redis://...`)
-   - Requires Redis/database for session storage (replace in-memory dict)
    - Update `flask_app/__init__.py`: `socketio = SocketIO(app, message_queue='redis://...')`
    - Increase worker count: `-w 4` (after Redis setup)
+   - Token blacklist is database-backed (already supports horizontal scaling)
 
 2. **Vertical Scaling (Larger Instance):**
    - Render plan: Starter → Standard (more CPU/RAM)
@@ -364,28 +370,41 @@ git push origin main
 
 ## Security Hardening for Production
 
-1. **Secrets Rotation:**
-   - Rotate `JWT_SECRET_KEY` every 90 days (invalidates all JWT tokens)
-   - Rotate `SECRET_KEY` (invalidates Flask sessions)
+1. **JWT Token Security:**
+   - Access tokens expire after 1 hour (enforced via `JWT_ACCESS_TOKEN_EXPIRES`)
+   - Refresh tokens expire after 30 days (enforced via `JWT_REFRESH_TOKEN_EXPIRES`)
+   - Tokens revoked on logout via database blacklist (`token_blacklist` table)
+   - Rotate `JWT_SECRET_KEY` every 90 days (invalidates all existing tokens - users must re-login)
+   - Implement periodic cleanup of expired tokens from blacklist (prevents unbounded growth)
+
+2. **Secrets Rotation:**
+   - Rotate `SECRET_KEY` every 90 days (invalidates Flask sessions)
    - Rotate API keys (Deepgram, OpenAI, DeepSeek) annually
 
-2. **Database Security:**
+3. **WebSocket CORS Security:**
+   - `SOCKETIO_ORIGINS` must be explicit allowlist (comma-separated domains)
+   - Never use wildcard `*` (app crashes if attempted)
+   - Example production: `https://yourdomain.com,https://app.yourdomain.com`
+   - Remove localhost origins in production
+
+4. **Database Security:**
    - Use `DATABASE_URL` with SSL: `?sslmode=require`
    - Limit database user permissions (no DROP, CREATE beyond initial setup)
    - Enable connection pooling (SQLAlchemy default: 5 connections)
 
-3. **CORS Tightening:**
+5. **CORS Tightening:**
    - Change `CORS_ORIGINS` from `*` to specific frontend URLs
    - Remove `localhost:3000` in production
 
-4. **Rate Limiting:**
+6. **Rate Limiting:**
    - Implement Flask-Limiter (not currently used)
    - Example: 100 requests/minute per user
 
-5. **Monitoring:**
+7. **Monitoring:**
    - Enable Render metrics (CPU, memory, request rate)
    - Set up alerts for health check failures
    - Monitor Auth0 dashboard for anomalous login patterns
+   - Monitor `token_blacklist` table size weekly
 
 ---
 
@@ -422,6 +441,23 @@ git push origin main
 
   # Verify in app logs
   ```
+
+### **Token Blacklist Migration**
+```bash
+# Run this migration to add token_blacklist table for JWT revocation
+# (Already included in Step 1 Security Hardening - 2026-01-17)
+
+python scripts/migrate_add_token_blacklist.py
+
+# Verify table created:
+psql $DATABASE_URL -c "\dt token_blacklist"
+
+# Expected output:
+#             List of relations
+#  Schema |      Name       | Type  |  Owner
+# --------+-----------------+-------+---------
+#  public | token_blacklist | table | postgres
+```
 
 ### **Database Initialization**
 ```bash
@@ -529,13 +565,13 @@ Causes:
 - ML models loaded (whisper, transformers) - each ~500MB
 - Active WebSocket connections (~10MB each)
 - Large file uploads buffered in memory
-- In-memory session storage (grows unbounded if no cleanup)
+- Token blacklist table growing (unbounded without cleanup)
 
 Solutions:
 - Upgrade Render plan (more RAM)
 - Limit max file size (currently 100MB for video)
 - Restart service to clear memory leaks
-- Implement session cleanup cron job (call cleanup_expired_sessions())
+- Implement token blacklist cleanup: DELETE FROM token_blacklist WHERE expires_at < NOW() - INTERVAL '7 days'
 ```
 
 ### **Slow Response Times**

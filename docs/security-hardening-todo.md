@@ -2,11 +2,82 @@
 
 ## Purpose
 
-This document identifies **concrete security vulnerabilities** in the current codebase and provides **actionable remediation steps**. **NO CODE CHANGES** are included here - this is a prioritized backlog for future security hardening work.
+This document identifies **concrete security vulnerabilities** in the current codebase and provides **actionable remediation steps**.
 
 ---
 
-## Critical Priority (Fix Within 7 Days)
+## ✅ COMPLETED (Step 1 Security Hardening)
+
+The following critical security issues have been **FIXED** and deployed:
+
+### ✅ 1. JWT Expiration Policy - IMPLEMENTED
+**Status:** COMPLETE
+**Implementation Date:** 2026-01-17
+
+**Changes Made:**
+- JWT access tokens now expire after 1 hour (`timedelta(hours=1)`)
+- JWT refresh tokens expire after 30 days (`timedelta(days=30)`)
+- Added `POST /auth/refresh` endpoint for token refresh
+- Added `POST /auth/logout` endpoint for token revocation
+- Created `TokenBlacklist` model for tracking revoked tokens
+- Token revocation enforced via `@jwt.token_in_blocklist_loader`
+
+**Files Modified:**
+- `flask_app/__init__.py` - JWT configuration
+- `flask_app/api/token_refresh.py` - New refresh/logout endpoints
+- `models/token_blacklist.py` - Token blacklist model
+
+### ✅ 2. Insecure Session Authentication - REMOVED
+**Status:** COMPLETE
+**Implementation Date:** 2026-01-17
+
+**Changes Made:**
+- Deleted `/mobile-auth/login`, `/mobile-auth/logout`, `/mobile-auth/verify` endpoints
+- Deleted `flask_app/api/auth.py` (165 lines)
+- Deleted `flask_app/services/session_manager.py` (148 lines)
+- Deleted `flask_app/sockets/audio_stream.py` (274 lines - deprecated handler)
+- Removed all `ALLOW_INSECURE_SESSION_AUTH` references
+- WebSocket now ONLY accepts Auth0 JWT tokens
+
+**Files Modified:**
+- `flask_app/auth/auth0.py` - Removed session auth flag
+- `flask_app/sockets/audio_stream_auth0.py` - Removed session fallback
+- `flask_app/__init__.py` - Removed blueprint registration
+
+### ✅ 3. CORS Policy Too Permissive - FIXED
+**Status:** COMPLETE
+**Implementation Date:** 2026-01-17
+
+**Changes Made:**
+- WebSocket CORS now reads from `SOCKETIO_ORIGINS` environment variable
+- Wildcard `*` removed - explicit origin allowlist required
+- App crashes at startup if `SOCKETIO_ORIGINS` not set
+- Production: `https://meeting-streamer.vercel.app`
+- Development: `http://localhost:3000,http://127.0.0.1:3000`
+
+**Files Modified:**
+- `flask_app/__init__.py` - CORS enforcement
+- `render.yaml` - Added SOCKETIO_ORIGINS env var
+- `.env.example` - Added SOCKETIO_ORIGINS documentation
+
+### ✅ 4. Hardcoded Secrets - ENFORCED
+**Status:** COMPLETE
+**Implementation Date:** 2026-01-17
+
+**Changes Made:**
+- Removed default fallback values for `JWT_SECRET_KEY` and `SECRET_KEY`
+- App crashes at startup if either secret is missing
+- Secrets must be set in environment variables (Render dashboard)
+- No plaintext secrets in code
+
+**Files Modified:**
+- `flask_app/__init__.py` - Secret enforcement
+- `render.yaml` - Secret configuration (sync: false)
+- `.env.example` - Secret generation instructions
+
+---
+
+## Remaining Priorities (Post-MVP)
 
 ### 1. JWT Expiration Policy Missing
 **Risk Level:** CRITICAL
