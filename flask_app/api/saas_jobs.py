@@ -15,52 +15,61 @@ logger = logging.getLogger(__name__)
 @bp.route('/saas/jobs', methods=['POST'])
 @jwt_required()
 def create_job():
-    """
-    Create a new job with optional file upload.
+    """Create and process a new job.
 
     Supports two modes:
-    1. JSON mode (existing input_ref):
-       Content-Type: application/json
-       Body: {"type": "transcription" or "translation", "input_ref": "storage_path"}
+    1. Transcription: multipart/form-data with file upload
+       Required: type='transcription', service='deepgram|whisper|assemblyai', file
+       Optional: language, diarize, punctuate, paragraphs, model
 
-    2. File upload mode (upload new file):
-       Content-Type: multipart/form-data
-       Fields: type (form field), file (file upload)
+    2. Translation: application/json with text
+       Required: type='translation', service='openai|google|deepseek', text, target_language
+       Optional: source_language
 
     Returns:
-        201: Job created successfully
-        400: Invalid request (missing/invalid fields, file too large, invalid type)
+        201: Job created and processed (or processing started)
+        400: Invalid request
         401: Unauthorized
-        500: Storage upload failed
+        500: Processing failed
     """
     user_id = get_jwt_identity()
 
-    # Detect request mode: JSON or multipart/form-data
+    # Detect request mode
     is_json = request.is_json
     is_multipart = request.content_type and 'multipart/form-data' in request.content_type
 
     if not is_json and not is_multipart:
-        return jsonify({
-            'error': 'Content-Type must be application/json or multipart/form-data'
-        }), 400
+        return jsonify({'error': 'Content-Type must be application/json or multipart/form-data'}), 400
 
-    # Extract job type based on request mode
+    # Extract parameters
     if is_json:
         data = request.get_json()
         job_type = data.get('type')
-        input_ref = data.get('input_ref')
-    else:  # multipart/form-data
+        service = data.get('service')
+        input_ref = data.get('text', '')  # For translation
+    else:  # multipart
         job_type = request.form.get('type')
-        input_ref = None  # Will be set after file upload
+        service = request.form.get('service')
+        input_ref = None  # Will be set after upload
 
-    # Validate job type
+    # Validate required fields
     if not job_type:
         return jsonify({'error': 'Missing required field: type'}), 400
-
     if job_type not in ['transcription', 'translation']:
         return jsonify({'error': 'Invalid type. Must be "transcription" or "translation"'}), 400
+    if not service:
+        return jsonify({'error': 'Missing required field: service'}), 400
 
-    # Handle file upload mode
+    # Validate service based on type
+    valid_transcription_services = ['deepgram', 'whisper', 'assemblyai']
+    valid_translation_services = ['openai', 'google', 'deepseek']
+
+    if job_type == 'transcription' and service not in valid_transcription_services:
+        return jsonify({'error': f'Invalid transcription service. Must be one of: {", ".join(valid_transcription_services)}'}), 400
+    if job_type == 'translation' and service not in valid_translation_services:
+        return jsonify({'error': f'Invalid translation service. Must be one of: {", ".join(valid_translation_services)}'}), 400
+
+    # Handle file upload (transcription mode)
     if is_multipart:
         if 'file' not in request.files:
             return jsonify({'error': 'Missing file upload'}), 400
@@ -69,18 +78,18 @@ def create_job():
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
 
-        # Create job first to get job_id for storage path
+        # Create job
         job = Job(
             user_id=user_id,
             type=job_type,
             status='queued',
-            input_ref='pending'  # Temporary, will be updated after upload
+            input_ref='pending'
         )
         db.session.add(job)
-        db.session.flush()  # Get job.id without committing
+        db.session.flush()
 
         try:
-            # Upload file to Supabase Storage
+            # Upload file to storage
             storage_service = get_storage_service()
             storage_path = storage_service.upload_input(
                 user_id=user_id,
@@ -88,57 +97,75 @@ def create_job():
                 file=file,
                 original_filename=file.filename
             )
-
-            # Update job with actual storage path
             job.input_ref = storage_path
             db.session.commit()
 
-            logger.info(f"Created job {job.id} with uploaded file: {storage_path}")
+            # Extract optional parameters
+            params = {
+                'language': request.form.get('language', 'en'),
+                'diarize': request.form.get('diarize', 'false'),
+                'punctuate': request.form.get('punctuate', 'true'),
+                'paragraphs': request.form.get('paragraphs', 'false'),
+                'model': request.form.get('model'),
+            }
+
+            # Process job
+            from flask_app.services.saas_processor import get_processor_service
+            processor = get_processor_service(user_id)
+            job = processor.process_job(job, service, params)
+
+            logger.info(f"Job {job.id} processed with service {service}, status={job.status}")
             return jsonify(job.to_dict()), 201
 
         except ValueError as e:
-            # Validation error (file too large, invalid type)
             db.session.rollback()
-            logger.warning(f"File upload validation failed: {e}")
+            logger.warning(f"Validation failed: {e}")
             return jsonify({'error': str(e)}), 400
-
-        except RuntimeError as e:
-            # Storage upload error
-            db.session.rollback()
-            logger.error(f"Storage upload failed: {e}")
-            return jsonify({'error': 'File upload failed', 'details': str(e)}), 500
-
         except Exception as e:
-            # Unexpected error
             db.session.rollback()
-            logger.error(f"Unexpected error during file upload: {e}")
-            return jsonify({'error': 'Internal server error'}), 500
+            logger.error(f"Job processing failed: {e}")
+            return jsonify({'error': 'Job processing failed', 'details': str(e)}), 500
 
-    # Handle JSON mode (existing behavior)
+    # Handle JSON mode (translation)
     else:
-        if not input_ref:
-            return jsonify({'error': 'Missing required field: input_ref'}), 400
+        if not data.get('text'):
+            return jsonify({'error': 'Missing required field: text'}), 400
+        if not data.get('target_language'):
+            return jsonify({'error': 'Missing required field: target_language'}), 400
 
         # Create job
         job = Job(
             user_id=user_id,
             type=job_type,
             status='queued',
-            input_ref=input_ref
+            input_ref=data['text'][:500]  # Store first 500 chars as reference
         )
-
         db.session.add(job)
         db.session.commit()
 
-        logger.info(f"Created job {job.id} with input_ref: {input_ref}")
+        # Extract parameters
+        params = {
+            'text': data['text'],
+            'target_language': data['target_language'],
+            'source_language': data.get('source_language', 'auto'),
+        }
+
+        # Process job
+        from flask_app.services.saas_processor import get_processor_service
+        processor = get_processor_service(user_id)
+        job = processor.process_job(job, service, params)
+
+        logger.info(f"Translation job {job.id} processed with service {service}, status={job.status}")
         return jsonify(job.to_dict()), 201
 
 
 @bp.route('/saas/jobs', methods=['GET'])
 @jwt_required()
 def list_jobs():
-    """
-    List all jobs for the authenticated user.
+    """List all jobs for the authenticated user (lightweight).
+
+    Returns minimal job data (id, type, status, fileName, created_at).
+    Excludes jobs with status='deleted'.
 
     Query parameters:
     - status: Filter by status (optional)
@@ -152,8 +179,8 @@ def list_jobs():
     """
     user_id = get_jwt_identity()
 
-    # Build query
-    query = Job.query.filter_by(user_id=user_id)
+    # Build query - exclude deleted jobs
+    query = Job.query.filter_by(user_id=user_id).filter(Job.status != 'deleted')
 
     # Apply filters
     status_filter = request.args.get('status')
@@ -178,7 +205,7 @@ def list_jobs():
     jobs = query.limit(limit).offset(offset).all()
 
     return jsonify({
-        'jobs': [job.to_dict() for job in jobs],
+        'jobs': [job.to_dict_minimal() for job in jobs],  # Changed from to_dict()
         'total': total,
         'limit': limit,
         'offset': offset
@@ -188,13 +215,45 @@ def list_jobs():
 @bp.route('/saas/jobs/<int:job_id>', methods=['GET'])
 @jwt_required()
 def get_job(job_id):
-    """
-    Get a specific job by ID.
+    """Get job metadata (no content).
+
+    Returns job fields and artifact metadata (storage refs), but not actual
+    transcript/translation content. Content is retrieved separately via
+    signed download URLs.
 
     Ownership is enforced - users can only retrieve their own jobs.
 
     Returns:
-        200: Job details
+        200: Job metadata
+        401: Unauthorized
+        403: Forbidden (job belongs to another user)
+        404: Job not found (or deleted)
+    """
+    user_id = get_jwt_identity()
+
+    job = Job.query.filter_by(id=job_id).first()
+
+    if not job or job.status == 'deleted':
+        return jsonify({'error': 'Job not found'}), 404
+
+    # Enforce ownership
+    if job.user_id != user_id:
+        return jsonify({'error': 'Forbidden: You do not have access to this job'}), 403
+
+    return jsonify(job.to_dict_metadata()), 200  # Changed from to_dict()
+
+
+@bp.route('/saas/jobs/<int:job_id>', methods=['DELETE'])
+@jwt_required()
+def delete_job(job_id):
+    """Soft-delete a job (set status to 'deleted').
+
+    Idempotent operation - returns success even if already deleted.
+
+    Ownership is enforced - users can only delete their own jobs.
+
+    Returns:
+        200: Job deleted successfully
         401: Unauthorized
         403: Forbidden (job belongs to another user)
         404: Job not found
@@ -210,7 +269,16 @@ def get_job(job_id):
     if job.user_id != user_id:
         return jsonify({'error': 'Forbidden: You do not have access to this job'}), 403
 
-    return jsonify(job.to_dict()), 200
+    # Soft delete (idempotent)
+    if job.status != 'deleted':
+        job.status = 'deleted'
+        db.session.commit()
+        logger.info(f"Job {job_id} deleted by user {user_id}")
+
+    return jsonify({
+        'message': 'Job deleted successfully',
+        'job_id': job_id
+    }), 200
 
 
 @bp.route('/saas/jobs/<int:job_id>/artifacts', methods=['GET'])
