@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "gateway": {
+      "command": "node",
+      "args": ["/home/msiddi/development/gateway_mcp/dist/gateway.js"]
+    }
+  }
+}
