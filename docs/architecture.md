@@ -9,6 +9,7 @@ Audio Transcription API is a Flask-based microservice providing multi-provider a
 - **Web Framework:** Flask 3.1.0 (application factory pattern)
 - **WebSocket:** Flask-SocketIO 5.4.1 with eventlet async mode
 - **Database:** PostgreSQL via SQLAlchemy
+- **Storage:** Supabase Storage (backend-only access, private bucket, signed URLs for downloads)
 - **Authentication:** Auth0 (RS256 JWT with expiration), Flask-JWT-Extended (1h access, 30d refresh), API keys (SHA256-hashed), token revocation via blacklist
 - **AI Services:** Deepgram (Nova-2 real-time), OpenAI (Whisper, GPT-4o-mini), AssemblyAI, Google Translate, DeepSeek
 
@@ -116,6 +117,11 @@ Audio Transcription API is a Flask-based microservice providing multi-provider a
 │  • video_transcription.py                                        │
 │    - VideoTranscriptionService (YouTube URLs + file uploads)     │
 │    - Uses: yt-dlp for download, openai-whisper for transcription │
+│  • storage.py (Supabase Storage for SaaS file uploads)           │
+│    - SupabaseStorageService (upload inputs, store artifacts)     │
+│    - Path structure: users/{user_id}/jobs/{job_id}/input|output  │
+│    - Signed URL generation (5-min default TTL)                   │
+│    - Singleton pattern via get_storage_service()                 │
 │  • postprocessing.py                                              │
 │    - SentimentService (placeholder)                              │
 │    - DocumentService (Word/PDF/Excel generation - placeholders)  │
@@ -208,7 +214,7 @@ Audio Transcription API is a Flask-based microservice providing multi-provider a
 | web_auth (api/auth.py) | /auth | Varies | User registration, login, API key management (JWT-based) |
 | token_refresh (flask_app/api/token_refresh.py) | /auth | Yes (@jwt_required) | JWT token refresh (/auth/refresh) and revocation (/auth/logout) |
 | protected (flask_app/api/protected.py) | /api | Yes (@require_auth Auth0) | Auth0 user info endpoints (/api/me, /api/userinfo) |
-| saas_jobs (flask_app/api/saas_jobs.py) | /saas/jobs | Yes (@jwt_required) | SaaS job persistence (create, list, retrieve jobs) |
+| saas_jobs (flask_app/api/saas_jobs.py) | /saas/jobs, /saas/artifacts | Yes (@jwt_required) | SaaS job persistence (create with file upload, list, retrieve jobs and artifacts, signed download URLs) |
 
 **Error Handling:**
 - Blueprint-specific: `@bp.errorhandler(BadRequest)` → JSON response
@@ -246,9 +252,11 @@ Audio Transcription API is a Flask-based microservice providing multi-provider a
 5. **stop_streaming / disconnect:** Close Deepgram connection, cleanup active_connections dict
 
 ### SaaS Job Flow: Creating and Retrieving Jobs
+
+#### JSON Mode (existing input_ref)
 ```
 1. Client → POST /saas/jobs
-   Headers: Authorization: Bearer <JWT access token>
+   Headers: Authorization: Bearer <JWT access token>, Content-Type: application/json
    Body: {"type": "transcription", "input_ref": "s3://bucket/audio.wav"}
 
 2. Flask routing → saas_jobs_bp.create_job()
@@ -272,9 +280,52 @@ Audio Transcription API is a Flask-based microservice providing multi-provider a
 6. Response:
    → Return 201 Created
    → JSON: job.to_dict() (includes id, user_id, type, status, created_at, artifacts=[])
+```
 
----
+#### File Upload Mode (new in STEP 3)
+```
+1. Client → POST /saas/jobs
+   Headers: Authorization: Bearer <JWT access token>, Content-Type: multipart/form-data
+   Body: type=transcription, file=<audio_file>
 
+2. Authentication: @jwt_required() → extract user_id
+
+3. Validation:
+   → Verify required fields: type, file
+   → Validate type ∈ {transcription, translation}
+   → Return 400 if missing
+
+4. Job Creation (pre-upload):
+   job = Job(user_id=user_id, type=type, status='queued', input_ref='pending')
+   db.session.add(job)
+   db.session.flush()  # Get job.id without commit
+
+5. Storage Upload:
+   storage_service = get_storage_service()
+   storage_path = storage_service.upload_input(
+       user_id=user_id,
+       job_id=job.id,
+       file=file,
+       original_filename=file.filename
+   )
+   → Validates file size (max 100MB default)
+   → Validates content type (audio/*, video/*, text/*)
+   → Uploads to: users/{user_id}/jobs/{job_id}/input/original.{ext}
+   → Returns storage path or raises ValueError/RuntimeError
+
+6. Job Update:
+   job.input_ref = storage_path
+   db.session.commit()
+   → If upload fails: db.session.rollback(), return 400 or 500
+
+7. Response:
+   → Return 201 Created
+   → JSON: job.to_dict() with input_ref = "users/{user_id}/jobs/{job_id}/input/original.wav"
+
+```
+
+#### List Jobs
+```
 Client → GET /saas/jobs?status=done&limit=10&offset=0
 Headers: Authorization: Bearer <JWT access token>
 
@@ -294,9 +345,10 @@ Headers: Authorization: Bearer <JWT access token>
 4. Response:
    → Return 200 OK
    → JSON: {jobs: [...], total: N, limit: M, offset: O}
+```
 
----
-
+#### Get Job by ID
+```
 Client → GET /saas/jobs/123
 Headers: Authorization: Bearer <JWT access token>
 
@@ -315,14 +367,70 @@ Headers: Authorization: Bearer <JWT access token>
    → JSON: job.to_dict() (includes all artifacts)
 ```
 
+#### Get Job Artifacts (STEP 3)
+```
+Client → GET /saas/jobs/123/artifacts
+Headers: Authorization: Bearer <JWT access token>
+
+1. Authentication: @jwt_required() → extract user_id
+
+2. Fetch Job & Verify Ownership:
+   → Job.query.filter_by(id=job_id).first()
+   → If not found: return 404
+   → if job.user_id != user_id: return 403
+
+3. Fetch Artifacts:
+   → Artifact.query.filter_by(job_id=job_id).all()
+
+4. Response:
+   → Return 200 OK
+   → JSON: {job_id: 123, artifacts: [{id, job_id, kind, storage_ref}, ...]}
+```
+
+#### Download Artifact via Signed URL (STEP 3)
+```
+Client → GET /saas/artifacts/456/download
+Headers: Authorization: Bearer <JWT access token>
+
+1. Authentication: @jwt_required() → extract user_id
+
+2. Fetch Artifact:
+   → Artifact.query.filter_by(id=artifact_id).first()
+   → If not found: return 404
+
+3. Verify Job Ownership:
+   → job = Job.query.filter_by(id=artifact.job_id).first()
+   → If not found: return 404
+   → if job.user_id != user_id: return 403
+
+4. Path Ownership Verification (additional security):
+   → storage_service.verify_path_ownership(artifact.storage_ref, user_id)
+   → if False: return 403 (path ownership mismatch)
+
+5. Generate Signed URL:
+   → signed_url = storage_service.generate_signed_url(artifact.storage_ref)
+   → TTL: SIGNED_URL_TTL_SECONDS (default 300s = 5 minutes)
+   → Raises RuntimeError if Supabase Storage fails
+
+6. Response:
+   → Return 200 OK
+   → JSON: {artifact_id, job_id, kind, download_url, expires_in_seconds: 300}
+```
+
 **Key Design Decisions for SaaS Jobs:**
 
 - **Minimal persistence:** No async workers, queues, or business logic - just database CRUD
 - **User isolation:** Strict ownership enforcement at query level (users never see other users' jobs)
 - **Synchronous:** Jobs are created immediately, status updates handled externally
-- **Artifact references:** Storage refs only (no embedded data) - points to S3/object storage
+- **Artifact references:** Storage refs only (no embedded data) - points to Supabase Storage
 - **No rewriting:** Existing transcription/translation logic remains unchanged
 - **JWT-only:** Uses Flask-JWT-Extended (@jwt_required) for authentication, not API keys
+- **Storage integration (STEP 3):** Backend-only file uploads via Supabase Storage
+  - **Path structure:** `users/{user_id}/jobs/{job_id}/input/original.{ext}` for inputs, `users/{user_id}/jobs/{job_id}/output/{artifact}.{ext}` for outputs
+  - **Security:** Path-based ownership verification, signed URLs for downloads (5-min default TTL)
+  - **Frontend never uploads directly:** All file uploads go through Flask backend (multipart/form-data → Supabase Storage)
+  - **File validation:** Size limits (100MB default), MIME type checking (audio/*, video/*, text/*)
+  - **Singleton service:** `get_storage_service()` ensures single Supabase client instance
 
 ### 3. **models/ (Database Schema)**
 - **models/__init__.py:** Exports `db` (SQLAlchemy), `bcrypt`, `init_db(app)`
@@ -446,6 +554,12 @@ Headers: Authorization: Bearer <JWT access token>
 | `FLASK_ENV` | Environment (development/production) | development | Controls debug mode |
 | `CORS_ORIGINS` / `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | `*` | Tighten in prod |
 | `LOG_LEVEL` | Logging verbosity | INFO | Optional |
+| `SUPABASE_URL` | Supabase project URL | None | Required for storage (STEP 3) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (backend-only) | None | Required for storage (STEP 3) |
+| `SUPABASE_STORAGE_BUCKET` | Supabase Storage bucket name | `saas-files` | Optional (defaults to saas-files) |
+| `MAX_UPLOAD_SIZE_MB` | Maximum file upload size in MB | `100` | Optional |
+| `ALLOWED_UPLOAD_TYPES` | Comma-separated MIME types for uploads | audio/*, video/*, text/plain, application/json | Optional |
+| `SIGNED_URL_TTL_SECONDS` | Download URL expiration time | `300` (5 min) | Optional |
 
 ### Configuration Loading Precedence
 1. **Environment variables** (via `os.getenv()`)
@@ -554,6 +668,7 @@ Headers: Authorization: Bearer <JWT access token>
 │              External Dependencies                          │
 ├────────────────────────────────────────────────────────────┤
 │  • PostgreSQL Database (Render managed or external)         │
+│  • Supabase Storage (supabase.com) - File storage (STEP 3) │
 │  • Auth0 (auth0.com) - JWT issuer                          │
 │  • Deepgram API (deepgram.com) - Transcription             │
 │  • OpenAI API (openai.com) - Whisper, GPT                  │
@@ -577,6 +692,13 @@ Headers: Authorization: Bearer <JWT access token>
 7. **API Key Storage:** User API keys are SHA256-hashed. Plaintext key shown ONCE on generation.
 8. **Auth0 JWKS Caching:** PyJWKClient caches public keys locally (avoids JWKS endpoint hammering).
 9. **Insecure Session Auth Removed:** All `/mobile-auth/*` endpoints and session token authentication deleted as of Step 1 Security Hardening (2026-01-17).
+10. **Storage Security (STEP 3):**
+    - **Backend-only uploads:** Frontend NEVER uploads directly to Supabase Storage. All uploads go through Flask backend with JWT validation.
+    - **Path-based ownership:** Storage paths enforce ownership via `users/{user_id}/...` structure. Additional verification via `verify_path_ownership()`.
+    - **Signed URLs:** Download URLs expire in 5 minutes (default). URLs are never persisted, generated on-demand only.
+    - **Service role key:** `SUPABASE_SERVICE_ROLE_KEY` used for backend access. Never exposed to frontend.
+    - **File validation:** Size limits (100MB default) and MIME type checking (audio/*, video/*, text/*) prevent abuse.
+    - **Private bucket:** All files stored in private bucket. Public access disabled. Downloads require signed URLs.
 
 ---
 

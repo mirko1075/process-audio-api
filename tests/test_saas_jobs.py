@@ -1,5 +1,7 @@
 """Tests for SaaS Jobs API endpoints."""
 import pytest
+import io
+from unittest.mock import patch, MagicMock
 from flask_jwt_extended import create_access_token
 from models import db
 from models.job import Job
@@ -480,3 +482,537 @@ class TestArtifactModel:
             assert artifact_dict['kind'] == 'transcript'
             assert artifact_dict['storage_ref'] == 's3://outputs/transcript.txt'
             assert 'id' in artifact_dict
+
+
+class TestFileUpload:
+    """Test POST /saas/jobs with file upload (multipart/form-data mode)."""
+
+    @patch('flask_app.api.saas_jobs.get_storage_service')
+    def test_create_job_with_file_upload_success(self, mock_get_storage, client, auth_headers):
+        """Test successfully creating a job with file upload."""
+        # Mock storage service
+        mock_storage = MagicMock()
+        mock_storage.upload_input.return_value = 'users/user_1/jobs/1/input/original.wav'
+        mock_get_storage.return_value = mock_storage
+
+        # Create a fake audio file
+        data = {
+            'type': 'transcription',
+            'file': (io.BytesIO(b'fake audio content'), 'test_audio.wav')
+        }
+
+        response = client.post(
+            '/saas/jobs',
+            headers=auth_headers['user1'],
+            data=data,
+            content_type='multipart/form-data'
+        )
+
+        assert response.status_code == 201
+        response_data = response.get_json()
+
+        # Verify job created
+        assert response_data['type'] == 'transcription'
+        assert response_data['status'] == 'queued'
+        assert response_data['user_id'] == 'user_1'
+        assert response_data['input_ref'] == 'users/user_1/jobs/1/input/original.wav'
+        assert 'id' in response_data
+
+        # Verify upload_input was called
+        mock_storage.upload_input.assert_called_once()
+        call_args = mock_storage.upload_input.call_args
+        assert call_args[1]['user_id'] == 'user_1'
+        assert call_args[1]['original_filename'] == 'test_audio.wav'
+
+    @patch('flask_app.api.saas_jobs.get_storage_service')
+    def test_create_job_with_file_upload_translation(self, mock_get_storage, client, auth_headers):
+        """Test creating a translation job with file upload."""
+        # Mock storage service
+        mock_storage = MagicMock()
+        mock_storage.upload_input.return_value = 'users/user_1/jobs/1/input/original.txt'
+        mock_get_storage.return_value = mock_storage
+
+        data = {
+            'type': 'translation',
+            'file': (io.BytesIO(b'fake text content'), 'document.txt')
+        }
+
+        response = client.post(
+            '/saas/jobs',
+            headers=auth_headers['user1'],
+            data=data,
+            content_type='multipart/form-data'
+        )
+
+        assert response.status_code == 201
+        response_data = response.get_json()
+        assert response_data['type'] == 'translation'
+        assert response_data['input_ref'] == 'users/user_1/jobs/1/input/original.txt'
+
+    def test_create_job_file_upload_missing_type(self, client, auth_headers):
+        """Test file upload without type field returns 400."""
+        data = {
+            'file': (io.BytesIO(b'fake audio content'), 'test_audio.wav')
+        }
+
+        response = client.post(
+            '/saas/jobs',
+            headers=auth_headers['user1'],
+            data=data,
+            content_type='multipart/form-data'
+        )
+
+        assert response.status_code == 400
+        response_data = response.get_json()
+        assert 'error' in response_data
+        assert 'type' in response_data['error']
+
+    def test_create_job_file_upload_missing_file(self, client, auth_headers):
+        """Test file upload without file returns 400."""
+        data = {'type': 'transcription'}
+
+        response = client.post(
+            '/saas/jobs',
+            headers=auth_headers['user1'],
+            data=data,
+            content_type='multipart/form-data'
+        )
+
+        assert response.status_code == 400
+        response_data = response.get_json()
+        assert 'error' in response_data
+        assert 'file' in response_data['error'].lower()
+
+    def test_create_job_file_upload_empty_filename(self, client, auth_headers):
+        """Test file upload with empty filename returns 400."""
+        data = {
+            'type': 'transcription',
+            'file': (io.BytesIO(b'fake audio content'), '')
+        }
+
+        response = client.post(
+            '/saas/jobs',
+            headers=auth_headers['user1'],
+            data=data,
+            content_type='multipart/form-data'
+        )
+
+        assert response.status_code == 400
+        response_data = response.get_json()
+        assert 'error' in response_data
+        assert 'file' in response_data['error'].lower() or 'selected' in response_data['error'].lower()
+
+    def test_create_job_file_upload_invalid_type(self, client, auth_headers):
+        """Test file upload with invalid job type returns 400."""
+        data = {
+            'type': 'invalid_type',
+            'file': (io.BytesIO(b'fake audio content'), 'test_audio.wav')
+        }
+
+        response = client.post(
+            '/saas/jobs',
+            headers=auth_headers['user1'],
+            data=data,
+            content_type='multipart/form-data'
+        )
+
+        assert response.status_code == 400
+        response_data = response.get_json()
+        assert 'error' in response_data
+        assert 'transcription' in response_data['error'] or 'translation' in response_data['error']
+
+    @patch('flask_app.api.saas_jobs.get_storage_service')
+    def test_create_job_file_too_large(self, mock_get_storage, client, auth_headers):
+        """Test file upload with file too large returns 400."""
+        # Mock storage service to raise ValueError for file too large
+        mock_storage = MagicMock()
+        mock_storage.upload_input.side_effect = ValueError('File size (150.00MB) exceeds maximum allowed (100MB)')
+        mock_get_storage.return_value = mock_storage
+
+        data = {
+            'type': 'transcription',
+            'file': (io.BytesIO(b'fake large file'), 'large_audio.wav')
+        }
+
+        response = client.post(
+            '/saas/jobs',
+            headers=auth_headers['user1'],
+            data=data,
+            content_type='multipart/form-data'
+        )
+
+        assert response.status_code == 400
+        response_data = response.get_json()
+        assert 'error' in response_data
+        assert '150' in response_data['error'] or 'exceeds' in response_data['error'].lower()
+
+    @patch('flask_app.api.saas_jobs.get_storage_service')
+    def test_create_job_invalid_content_type(self, mock_get_storage, client, auth_headers):
+        """Test file upload with invalid content type returns 400."""
+        # Mock storage service to raise ValueError for invalid content type
+        mock_storage = MagicMock()
+        mock_storage.upload_input.side_effect = ValueError("File type 'application/exe' not allowed")
+        mock_get_storage.return_value = mock_storage
+
+        data = {
+            'type': 'transcription',
+            'file': (io.BytesIO(b'fake file'), 'malware.exe')
+        }
+
+        response = client.post(
+            '/saas/jobs',
+            headers=auth_headers['user1'],
+            data=data,
+            content_type='multipart/form-data'
+        )
+
+        assert response.status_code == 400
+        response_data = response.get_json()
+        assert 'error' in response_data
+        assert 'not allowed' in response_data['error'].lower() or 'exe' in response_data['error'].lower()
+
+    @patch('flask_app.api.saas_jobs.get_storage_service')
+    def test_create_job_storage_upload_failure(self, mock_get_storage, client, auth_headers):
+        """Test file upload with storage failure returns 500."""
+        # Mock storage service to raise RuntimeError for storage failure
+        mock_storage = MagicMock()
+        mock_storage.upload_input.side_effect = RuntimeError('Supabase Storage connection failed')
+        mock_get_storage.return_value = mock_storage
+
+        data = {
+            'type': 'transcription',
+            'file': (io.BytesIO(b'fake audio content'), 'test_audio.wav')
+        }
+
+        response = client.post(
+            '/saas/jobs',
+            headers=auth_headers['user1'],
+            data=data,
+            content_type='multipart/form-data'
+        )
+
+        assert response.status_code == 500
+        response_data = response.get_json()
+        assert 'error' in response_data
+        assert 'upload failed' in response_data['error'].lower()
+
+    @patch('flask_app.api.saas_jobs.get_storage_service')
+    def test_create_job_unexpected_error(self, mock_get_storage, client, auth_headers):
+        """Test file upload with unexpected error returns 500."""
+        # Mock storage service to raise unexpected exception
+        mock_storage = MagicMock()
+        mock_storage.upload_input.side_effect = Exception('Unexpected database error')
+        mock_get_storage.return_value = mock_storage
+
+        data = {
+            'type': 'transcription',
+            'file': (io.BytesIO(b'fake audio content'), 'test_audio.wav')
+        }
+
+        response = client.post(
+            '/saas/jobs',
+            headers=auth_headers['user1'],
+            data=data,
+            content_type='multipart/form-data'
+        )
+
+        assert response.status_code == 500
+        response_data = response.get_json()
+        assert 'error' in response_data
+        assert 'internal server error' in response_data['error'].lower()
+
+    def test_create_job_invalid_content_type_header(self, client, auth_headers):
+        """Test creating job with invalid Content-Type returns 400."""
+        response = client.post(
+            '/saas/jobs',
+            headers=auth_headers['user1'],
+            data='plain text data',
+            content_type='text/plain'
+        )
+
+        assert response.status_code == 400
+        response_data = response.get_json()
+        assert 'error' in response_data
+        assert 'Content-Type' in response_data['error'] or 'application/json' in response_data['error']
+
+
+class TestGetJobArtifacts:
+    """Test GET /saas/jobs/{job_id}/artifacts - Get artifacts for a job."""
+
+    def test_get_artifacts_success(self, client, auth_headers, sample_jobs):
+        """Test successfully retrieving artifacts for a job."""
+        job_id = sample_jobs['user1_job1']
+
+        response = client.get(
+            f'/saas/jobs/{job_id}/artifacts',
+            headers=auth_headers['user1']
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+
+        # Verify response structure
+        assert 'job_id' in data
+        assert 'artifacts' in data
+        assert data['job_id'] == job_id
+
+        # Verify artifacts list
+        artifacts = data['artifacts']
+        assert len(artifacts) == 1
+        assert artifacts[0]['kind'] == 'transcript'
+        assert artifacts[0]['storage_ref'] == 's3://bucket/outputs/transcript1.txt'
+        assert 'id' in artifacts[0]
+        assert 'job_id' in artifacts[0]
+
+    def test_get_artifacts_empty_list(self, client, auth_headers, sample_jobs):
+        """Test retrieving artifacts for job with no artifacts."""
+        job_id = sample_jobs['user1_job2']  # Job with no artifacts
+
+        response = client.get(
+            f'/saas/jobs/{job_id}/artifacts',
+            headers=auth_headers['user1']
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['job_id'] == job_id
+        assert data['artifacts'] == []
+
+    def test_get_artifacts_without_auth(self, client, sample_jobs):
+        """Test getting artifacts without authentication returns 401."""
+        job_id = sample_jobs['user1_job1']
+
+        response = client.get(f'/saas/jobs/{job_id}/artifacts')
+
+        assert response.status_code == 401
+
+    def test_get_artifacts_job_not_found(self, client, auth_headers):
+        """Test getting artifacts for non-existent job returns 404."""
+        response = client.get(
+            '/saas/jobs/99999/artifacts',
+            headers=auth_headers['user1']
+        )
+
+        assert response.status_code == 404
+        data = response.get_json()
+        assert 'error' in data
+        assert 'not found' in data['error'].lower()
+
+    def test_get_artifacts_forbidden_access(self, client, auth_headers, sample_jobs):
+        """Test accessing another user's job artifacts returns 403."""
+        # User 1 trying to access User 2's job artifacts
+        job_id = sample_jobs['user2_job1']
+
+        response = client.get(
+            f'/saas/jobs/{job_id}/artifacts',
+            headers=auth_headers['user1']
+        )
+
+        assert response.status_code == 403
+        data = response.get_json()
+        assert 'error' in data
+        assert 'Forbidden' in data['error'] or 'access' in data['error'].lower()
+
+    def test_get_artifacts_multiple_artifacts(self, app, client, auth_headers, sample_jobs):
+        """Test retrieving multiple artifacts for a job."""
+        job_id = sample_jobs['user1_job1']
+
+        # Add more artifacts to the job
+        with app.app_context():
+            artifact2 = Artifact(
+                job_id=job_id,
+                kind='srt',
+                storage_ref='users/user_1/jobs/1/output/subtitles.srt'
+            )
+            artifact3 = Artifact(
+                job_id=job_id,
+                kind='json',
+                storage_ref='users/user_1/jobs/1/output/metadata.json'
+            )
+            db.session.add_all([artifact2, artifact3])
+            db.session.commit()
+
+        response = client.get(
+            f'/saas/jobs/{job_id}/artifacts',
+            headers=auth_headers['user1']
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data['artifacts']) == 3
+
+        # Verify all artifact kinds are present
+        kinds = {artifact['kind'] for artifact in data['artifacts']}
+        assert kinds == {'transcript', 'srt', 'json'}
+
+
+class TestDownloadArtifact:
+    """Test GET /saas/artifacts/{artifact_id}/download - Download artifact via signed URL."""
+
+    @patch('flask_app.api.saas_jobs.get_storage_service')
+    def test_download_artifact_success(self, mock_get_storage, client, auth_headers, sample_jobs, app):
+        """Test successfully generating download URL for artifact."""
+        # Mock storage service
+        mock_storage = MagicMock()
+        mock_storage.verify_path_ownership.return_value = True
+        mock_storage.generate_signed_url.return_value = 'https://supabase.co/storage/signed-url-abc123?expires=300'
+        mock_storage.signed_url_ttl_seconds = 300
+        mock_get_storage.return_value = mock_storage
+
+        # Get artifact ID from sample_jobs
+        with app.app_context():
+            job_id = sample_jobs['user1_job1']
+            artifact = Artifact.query.filter_by(job_id=job_id).first()
+            artifact_id = artifact.id
+
+        response = client.get(
+            f'/saas/artifacts/{artifact_id}/download',
+            headers=auth_headers['user1']
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+
+        # Verify response structure
+        assert 'artifact_id' in data
+        assert 'job_id' in data
+        assert 'kind' in data
+        assert 'download_url' in data
+        assert 'expires_in_seconds' in data
+
+        assert data['artifact_id'] == artifact_id
+        assert data['kind'] == 'transcript'
+        assert data['download_url'] == 'https://supabase.co/storage/signed-url-abc123?expires=300'
+        assert data['expires_in_seconds'] == 300
+
+        # Verify mocks were called
+        mock_storage.verify_path_ownership.assert_called_once()
+        mock_storage.generate_signed_url.assert_called_once()
+
+    def test_download_artifact_without_auth(self, client, app, sample_jobs):
+        """Test downloading artifact without authentication returns 401."""
+        with app.app_context():
+            job_id = sample_jobs['user1_job1']
+            artifact = Artifact.query.filter_by(job_id=job_id).first()
+            artifact_id = artifact.id
+
+        response = client.get(f'/saas/artifacts/{artifact_id}/download')
+
+        assert response.status_code == 401
+
+    def test_download_artifact_not_found(self, client, auth_headers):
+        """Test downloading non-existent artifact returns 404."""
+        response = client.get(
+            '/saas/artifacts/99999/download',
+            headers=auth_headers['user1']
+        )
+
+        assert response.status_code == 404
+        data = response.get_json()
+        assert 'error' in data
+        assert 'not found' in data['error'].lower()
+
+    @patch('flask_app.api.saas_jobs.get_storage_service')
+    def test_download_artifact_forbidden_access(self, mock_get_storage, client, auth_headers, sample_jobs, app):
+        """Test accessing another user's artifact returns 403."""
+        # Mock storage service
+        mock_storage = MagicMock()
+        mock_storage.verify_path_ownership.return_value = True
+        mock_get_storage.return_value = mock_storage
+
+        # User 1 trying to access User 2's artifact
+        with app.app_context():
+            # Create artifact for user 2's job
+            job_id = sample_jobs['user2_job1']
+            artifact = Artifact(
+                job_id=job_id,
+                kind='transcript',
+                storage_ref='users/user_2/jobs/3/output/transcript.txt'
+            )
+            db.session.add(artifact)
+            db.session.commit()
+            artifact_id = artifact.id
+
+        response = client.get(
+            f'/saas/artifacts/{artifact_id}/download',
+            headers=auth_headers['user1']
+        )
+
+        assert response.status_code == 403
+        data = response.get_json()
+        assert 'error' in data
+        assert 'Forbidden' in data['error'] or 'access' in data['error'].lower()
+
+    @patch('flask_app.api.saas_jobs.get_storage_service')
+    def test_download_artifact_path_ownership_mismatch(self, mock_get_storage, client, auth_headers, sample_jobs, app):
+        """Test downloading artifact with path ownership mismatch returns 403."""
+        # Mock storage service with path ownership verification failing
+        mock_storage = MagicMock()
+        mock_storage.verify_path_ownership.return_value = False
+        mock_get_storage.return_value = mock_storage
+
+        with app.app_context():
+            job_id = sample_jobs['user1_job1']
+            artifact = Artifact.query.filter_by(job_id=job_id).first()
+            artifact_id = artifact.id
+
+        response = client.get(
+            f'/saas/artifacts/{artifact_id}/download',
+            headers=auth_headers['user1']
+        )
+
+        assert response.status_code == 403
+        data = response.get_json()
+        assert 'error' in data
+        assert 'Forbidden' in data['error'] or 'Invalid storage path' in data['error']
+
+        # Verify verify_path_ownership was called
+        mock_storage.verify_path_ownership.assert_called_once()
+
+    @patch('flask_app.api.saas_jobs.get_storage_service')
+    def test_download_artifact_signed_url_failure(self, mock_get_storage, client, auth_headers, sample_jobs, app):
+        """Test downloading artifact with signed URL generation failure returns 500."""
+        # Mock storage service with signed URL generation failure
+        mock_storage = MagicMock()
+        mock_storage.verify_path_ownership.return_value = True
+        mock_storage.generate_signed_url.side_effect = RuntimeError('Supabase Storage connection failed')
+        mock_get_storage.return_value = mock_storage
+
+        with app.app_context():
+            job_id = sample_jobs['user1_job1']
+            artifact = Artifact.query.filter_by(job_id=job_id).first()
+            artifact_id = artifact.id
+
+        response = client.get(
+            f'/saas/artifacts/{artifact_id}/download',
+            headers=auth_headers['user1']
+        )
+
+        assert response.status_code == 500
+        data = response.get_json()
+        assert 'error' in data
+        assert 'Failed to generate download URL' in data['error'] or 'download URL' in data['error'].lower()
+
+    @patch('flask_app.api.saas_jobs.get_storage_service')
+    def test_download_artifact_unexpected_error(self, mock_get_storage, client, auth_headers, sample_jobs, app):
+        """Test downloading artifact with unexpected error returns 500."""
+        # Mock storage service with unexpected exception
+        mock_storage = MagicMock()
+        mock_storage.verify_path_ownership.return_value = True
+        mock_storage.generate_signed_url.side_effect = Exception('Unexpected error')
+        mock_get_storage.return_value = mock_storage
+
+        with app.app_context():
+            job_id = sample_jobs['user1_job1']
+            artifact = Artifact.query.filter_by(job_id=job_id).first()
+            artifact_id = artifact.id
+
+        response = client.get(
+            f'/saas/artifacts/{artifact_id}/download',
+            headers=auth_headers['user1']
+        )
+
+        assert response.status_code == 500
+        data = response.get_json()
+        assert 'error' in data
+        assert 'Internal server error' in data['error'] or 'internal' in data['error'].lower()

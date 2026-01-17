@@ -13,7 +13,8 @@ This runbook provides step-by-step debugging procedures for common failure scena
 3. [How to Debug WebSocket Audio Streaming](#3-how-to-debug-websocket-audio-streaming)
 4. [How to Debug JWT Authentication Issues](#4-how-to-debug-jwt-authentication-issues)
 5. [How to Debug SaaS Job Issues](#5-how-to-debug-saas-job-issues)
-6. [Common Failure Modes](#6-common-failure-modes)
+6. [How to Debug Storage Upload/Download Issues (STEP 3)](#6-how-to-debug-storage-uploaddownload-issues-step-3)
+7. [Common Failure Modes](#7-common-failure-modes)
 
 ---
 
@@ -1032,7 +1033,247 @@ psql $DATABASE_URL -c "DELETE FROM jobs WHERE user_id = 'user_123';"
 
 ---
 
-## 6. Common Failure Modes
+## 6. How to Debug Storage Upload/Download Issues (STEP 3)
+
+### Storage Symptoms
+
+- HTTP 400 response: "File size exceeds maximum allowed"
+- HTTP 400 response: "File type not allowed"
+- HTTP 500 response: "File upload failed"
+- HTTP 403 response: "Forbidden: Invalid storage path"
+- HTTP 500 response: "Failed to generate download URL"
+- File upload hangs or times out
+- Download URL returns 404 or 403
+
+### Investigation Steps
+
+#### Step 1: Verify Supabase Storage Configuration
+
+```bash
+# Check environment variables in Render Dashboard:
+SUPABASE_URL = https://xxx.supabase.co (set?)
+SUPABASE_SERVICE_ROLE_KEY = *********** (set?)
+SUPABASE_STORAGE_BUCKET = saas-files (default)
+
+# Test Supabase connection (local):
+python -c "
+from supabase import create_client
+import os
+client = create_client(
+    os.getenv('SUPABASE_URL'),
+    os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+)
+# List buckets to verify connection
+buckets = client.storage.list_buckets()
+print(buckets)
+"
+
+# Expected: List of buckets including 'saas-files'
+# If error: Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY validity
+```
+
+#### Step 2: Check File Upload Logs
+
+```bash
+# Access Render Dashboard → Logs tab
+# Search for error patterns:
+
+Pattern: "Storage upload failed: ..."
+Location: flask_app/api/saas_jobs.py:create_job()
+
+Pattern: "File size (...MB) exceeds maximum allowed (...MB)"
+Location: flask_app/services/storage.py:SupabaseStorageService.upload_input()
+
+Pattern: "File type '...' not allowed"
+Location: flask_app/services/storage.py:SupabaseStorageService.upload_input()
+
+# Common errors:
+• ValueError: File validation failed (size or type)
+• RuntimeError: Supabase Storage API failure
+• Exception: Network timeout or connection error
+```
+
+#### Step 3: Verify File Size and Type Limits
+
+```bash
+# Check configured limits:
+echo $MAX_UPLOAD_SIZE_MB  # Default: 100
+echo $ALLOWED_UPLOAD_TYPES  # Default: audio/*,video/*,text/plain,application/json
+
+# Test file size:
+ls -lh test_file.wav
+# If file > 100MB → returns 400 error (expected)
+
+# Test MIME type:
+file --mime-type test_file.exe
+# If type not in ALLOWED_UPLOAD_TYPES → returns 400 error (expected)
+```
+
+#### Step 4: Check Storage Path Structure
+
+```bash
+# Verify storage path format in database:
+psql $DATABASE_URL -c "SELECT id, input_ref FROM jobs WHERE id = 123;"
+
+# Expected path format:
+# users/{user_id}/jobs/{job_id}/input/original.{ext}
+# Example: users/auth0|123/jobs/456/input/original.wav
+
+# Path ownership verification:
+# - Path MUST start with "users/{user_id}/"
+# - user_id MUST match JWT token user_id
+# - If mismatch → 403 Forbidden
+```
+
+#### Step 5: Test File Upload Flow
+
+```bash
+# Test multipart/form-data upload:
+curl -X POST https://your-api.onrender.com/saas/jobs \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -F "type=transcription" \
+  -F "file=@test_audio.wav"
+
+# Expected: 201 Created with job JSON containing:
+# {
+#   "id": 123,
+#   "input_ref": "users/auth0|xxx/jobs/123/input/original.wav",
+#   "status": "queued"
+# }
+
+# Actual error responses:
+• 400: Missing file, invalid type, file too large, invalid content type
+• 401: Missing or invalid JWT token
+• 500: Storage upload failed (Supabase connection error)
+```
+
+#### Step 6: Verify Supabase Storage Bucket
+
+```bash
+# Check bucket configuration in Supabase Dashboard:
+# 1. Navigate to Storage → Buckets
+# 2. Verify 'saas-files' bucket exists
+# 3. Check bucket settings:
+#    - Public: NO (must be private)
+#    - File size limit: Match MAX_UPLOAD_SIZE_MB
+#    - Allowed MIME types: Match ALLOWED_UPLOAD_TYPES
+
+# Check bucket policies (RLS):
+# - Service role key should have full access (INSERT, SELECT)
+# - No public access allowed
+```
+
+#### Step 7: Debug Signed URL Generation
+
+```bash
+# Check signed URL download errors:
+
+Pattern: "Failed to generate signed URL: ..."
+Location: flask_app/api/saas_jobs.py:download_artifact()
+
+# Test signed URL generation:
+curl -X GET https://your-api.onrender.com/saas/artifacts/456/download \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+
+# Expected: 200 OK with:
+# {
+#   "artifact_id": 456,
+#   "download_url": "https://xxx.supabase.co/storage/...",
+#   "expires_in_seconds": 300
+# }
+
+# Common errors:
+• 403: Path ownership mismatch (artifact doesn't belong to user)
+• 404: Artifact not found
+• 500: Supabase Storage API failure
+```
+
+#### Step 8: Check Storage Service Initialization
+
+```bash
+# Verify storage service singleton initialization:
+
+Pattern: "SUPABASE_URL environment variable is required"
+Pattern: "SUPABASE_SERVICE_ROLE_KEY environment variable is required"
+Location: flask_app/services/storage.py:SupabaseStorageService.__init__()
+
+# If service fails to initialize:
+→ App will return 500 errors for ALL storage operations
+→ Check environment variables are set correctly
+→ Verify Supabase credentials are valid
+```
+
+#### Step 9: Test Storage Operations Manually
+
+```python
+# Local test script to verify storage operations:
+from flask_app.services.storage import get_storage_service
+from werkzeug.datastructures import FileStorage
+import io
+
+# Initialize service
+storage = get_storage_service()
+
+# Test upload
+file = FileStorage(
+    stream=io.BytesIO(b"test audio content"),
+    filename="test.wav",
+    content_type="audio/wav"
+)
+
+try:
+    path = storage.upload_input(
+        user_id="auth0|test123",
+        job_id=999,
+        file=file,
+        original_filename="test.wav"
+    )
+    print(f"Upload successful: {path}")
+except Exception as e:
+    print(f"Upload failed: {e}")
+
+# Test signed URL generation
+try:
+    url = storage.generate_signed_url(path)
+    print(f"Signed URL: {url}")
+except Exception as e:
+    print(f"URL generation failed: {e}")
+```
+
+#### Step 10: Monitor Supabase Storage Dashboard
+
+```bash
+# Check Supabase Dashboard for storage metrics:
+# 1. Navigate to Storage → Usage
+# 2. Check:
+#    - Total storage used
+#    - Number of files
+#    - API request count
+#    - Error rate
+
+# If errors in Supabase:
+→ Check Supabase service status: https://status.supabase.com
+→ Verify project not suspended (billing issues)
+→ Check API rate limits not exceeded
+```
+
+### Common Storage Error Resolutions
+
+| Error | Cause | Resolution |
+|-------|-------|------------|
+| "File size exceeds maximum" | File > MAX_UPLOAD_SIZE_MB | Increase MAX_UPLOAD_SIZE_MB or reject large files |
+| "File type not allowed" | MIME type not in ALLOWED_UPLOAD_TYPES | Update ALLOWED_UPLOAD_TYPES or reject file |
+| "Storage upload failed: 404" | Bucket doesn't exist | Create 'saas-files' bucket in Supabase |
+| "Storage upload failed: 403" | Service role key lacks permissions | Check bucket RLS policies, verify service role key |
+| "Failed to generate signed URL" | File not found in storage | Verify file uploaded successfully, check storage_ref path |
+| "Forbidden: Invalid storage path" | Path ownership mismatch | Verify storage_ref starts with users/{user_id}/ |
+| Connection timeout | Network issue or Supabase down | Check Supabase status, retry request |
+| "SUPABASE_URL required" | Missing env var | Set SUPABASE_URL in Render dashboard |
+| "SUPABASE_SERVICE_ROLE_KEY required" | Missing env var | Set SUPABASE_SERVICE_ROLE_KEY in Render dashboard |
+
+---
+
+## 7. Common Failure Modes
 
 ### Database Connection Failures
 

@@ -348,9 +348,13 @@ paths:
 
   /saas/jobs:
     post:
-      summary: Create a new job
+      summary: Create a new job with optional file upload
       description: |
         Create a new transcription or translation job.
+        Supports two modes:
+        1. JSON mode: Provide an existing input_ref (storage path)
+        2. File upload mode: Upload a new audio/video/text file
+
         The job will be created in 'queued' status.
       tags:
         - SaaS Jobs
@@ -373,8 +377,24 @@ paths:
                   example: "transcription"
                 input_ref:
                   type: string
-                  description: Reference to input file or text (file key or text hash)
-                  example: "s3://bucket/audio/file123.wav"
+                  description: Reference to input file or text (storage path)
+                  example: "users/auth0|123/jobs/456/input/original.wav"
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - type
+                - file
+              properties:
+                type:
+                  type: string
+                  enum: [transcription, translation]
+                  description: Type of job to create
+                  example: "transcription"
+                file:
+                  type: string
+                  format: binary
+                  description: Audio/video/text file to upload (max 100MB by default)
       responses:
         '201':
           description: Job created successfully
@@ -383,13 +403,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/Job'
         '400':
-          description: Invalid request (missing or invalid fields)
+          description: Invalid request (missing/invalid fields, file too large, invalid content type)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Storage upload failed
           content:
             application/json:
               schema:
@@ -505,6 +531,131 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /saas/jobs/{job_id}/artifacts:
+    get:
+      summary: Get all artifacts for a specific job
+      description: |
+        Retrieve all output artifacts associated with a job.
+        Ownership is enforced - users can only retrieve artifacts for their own jobs.
+      tags:
+        - SaaS Jobs
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Job ID
+      responses:
+        '200':
+          description: List of artifacts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:
+                    type: integer
+                    description: Job ID
+                    example: 123
+                  artifacts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Artifact'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (job belongs to another user)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /saas/artifacts/{artifact_id}/download:
+    get:
+      summary: Generate a short-lived download URL for an artifact
+      description: |
+        Generate a signed URL for downloading an artifact file.
+        The URL is valid for 5 minutes by default (configurable via SIGNED_URL_TTL_SECONDS).
+        Ownership is enforced - users can only download artifacts from their own jobs.
+      tags:
+        - SaaS Jobs
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: artifact_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Artifact ID
+      responses:
+        '200':
+          description: Signed download URL generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  artifact_id:
+                    type: integer
+                    description: Artifact ID
+                    example: 456
+                  job_id:
+                    type: integer
+                    description: Associated job ID
+                    example: 123
+                  kind:
+                    type: string
+                    description: Type of artifact
+                    enum: [transcript, translation, srt, json]
+                    example: "transcript"
+                  download_url:
+                    type: string
+                    format: uri
+                    description: Short-lived signed URL for downloading the artifact
+                    example: "https://supabase-url.co/storage/v1/object/sign/bucket/path?token=xyz"
+                  expires_in_seconds:
+                    type: integer
+                    description: Number of seconds until the URL expires
+                    example: 300
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (artifact belongs to another user or invalid storage path)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Artifact or associated job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Failed to generate signed URL
           content:
             application/json:
               schema:
