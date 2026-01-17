@@ -26,7 +26,7 @@ SaaS pubblico + secret di fallback = no
 
 ⛔ Tutto il resto (rate limiting avanzato, CSP, key rotation annuale) può stare post-MVP.
 
-Step 2 — SaaS data model MINIMO (si incastra con ciò che hai)
+# Step 2 — SaaS data model MINIMO (si incastra con ciò che hai)
 
 Tu hai già metà billing senza rendertene conto.
 
@@ -60,7 +60,7 @@ artifacts
 NON duplicare dati. Il DB è solo indice + stato.
 Il contenuto vive in object storage.
 
-Step 3 — Web app minimale (backend-first, davvero)
+# Step 3 — Web app minimale (backend-first, davvero)
 
 Qui serve essere spietati.
 
@@ -87,7 +87,7 @@ Job detail (download risultato)
 Fine.
 Niente dashboard “bella”, niente analytics UI.
 
-Step 4 — API SaaS wrapper (non riscrivere nulla)
+# Step 4 — API SaaS wrapper (non riscrivere nulla)
 
 Non tocchi i servizi esistenti.
 
@@ -110,7 +110,7 @@ Questo è coerente con l’architettura che hai documentato
 
 architecture
 
-Step 5 — Monetizzazione (semplice e sostenibile)
+# Step 5 — Monetizzazione (semplice e sostenibile)
 ❌ Cattive idee
 
 calcolo in tempo reale perfetto dei costi
@@ -130,7 +130,7 @@ Hard stop quando finiti
 Hai già UsageLog.cost_usd.
 Usalo come approximation, non come verità contabile.
 
-Step 6 — Cose da NON fare (te lo dico esplicitamente)
+# Step 6 — Cose da NON fare (te lo dico esplicitamente)
 
 ❌ Non implementare:
 

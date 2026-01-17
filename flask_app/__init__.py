@@ -140,6 +140,7 @@ def register_blueprints(app: Flask) -> None:
     from flask_app.api.postprocessing import bp as postprocessing_bp
     from flask_app.api.utilities import bp as utilities_bp
     from flask_app.api.token_refresh import bp as token_refresh_bp
+    from flask_app.api.saas_jobs import bp as saas_jobs_bp
 
     # Try to import web auth blueprint (from main branch)
     try:
@@ -167,6 +168,8 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(translation_bp, url_prefix='/translations')
     app.register_blueprint(postprocessing_bp)
     app.register_blueprint(utilities_bp, url_prefix='/utilities')
+    app.register_blueprint(saas_jobs_bp)
+    logging.info("SaaS jobs blueprint registered")
 
 
 def register_socketio_handlers(socketio: SocketIO) -> None:

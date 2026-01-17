@@ -68,6 +68,10 @@ Audio Transcription API is a Flask-based microservice providing multi-provider a
 │   - /logout          │
 │ • /api/me, /api/     │
 │   userinfo (Auth0)   │
+│ • /saas/jobs         │
+│   - POST (create)    │
+│   - GET (list)       │
+│   - GET /{id}        │
 └──────┬───────────────┘
        │
        ▼
@@ -153,9 +157,21 @@ Audio Transcription API is a Flask-based microservice providing multi-provider a
 │    - Fields: jti (unique JWT ID), token_type, user_id            │
 │    - Timestamps: revoked_at, expires_at                          │
 │                                                                   │
+│ models/job.py:                                                    │
+│  • Job (SaaS job persistence)                                    │
+│    - Fields: id, user_id, type (transcription|translation),      │
+│      status (queued|processing|done|failed), input_ref,          │
+│      error_message, created_at, completed_at                     │
+│    - Relationship: artifacts (one-to-many, cascade delete)       │
+│  • Artifact (job output references)                              │
+│    - Fields: id, job_id, kind (transcript|translation|srt|json), │
+│      storage_ref (object storage reference)                      │
+│    - Foreign key: job_id → jobs.id                               │
+│                                                                   │
 │ Database Initialization:                                          │
 │  • Auto-create: flask_app/__init__.py calls db.create_all()      │
 │  • Manual script: scripts/init_db.py (drop/recreate + admin user)│
+│  • Migration: scripts/migrate_add_jobs_artifacts.py              │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -192,6 +208,7 @@ Audio Transcription API is a Flask-based microservice providing multi-provider a
 | web_auth (api/auth.py) | /auth | Varies | User registration, login, API key management (JWT-based) |
 | token_refresh (flask_app/api/token_refresh.py) | /auth | Yes (@jwt_required) | JWT token refresh (/auth/refresh) and revocation (/auth/logout) |
 | protected (flask_app/api/protected.py) | /api | Yes (@require_auth Auth0) | Auth0 user info endpoints (/api/me, /api/userinfo) |
+| saas_jobs (flask_app/api/saas_jobs.py) | /saas/jobs | Yes (@jwt_required) | SaaS job persistence (create, list, retrieve jobs) |
 
 **Error Handling:**
 - Blueprint-specific: `@bp.errorhandler(BadRequest)` → JSON response
@@ -227,6 +244,85 @@ Audio Transcription API is a Flask-based microservice providing multi-provider a
 3. **audio_chunk:** Base64-decode audio → send to Deepgram live stream
 4. **Deepgram callbacks:** `on_message` → emit `transcription` event with transcript, is_final, confidence
 5. **stop_streaming / disconnect:** Close Deepgram connection, cleanup active_connections dict
+
+### SaaS Job Flow: Creating and Retrieving Jobs
+```
+1. Client → POST /saas/jobs
+   Headers: Authorization: Bearer <JWT access token>
+   Body: {"type": "transcription", "input_ref": "s3://bucket/audio.wav"}
+
+2. Flask routing → saas_jobs_bp.create_job()
+
+3. Authentication:
+   @jwt_required() decorator
+   → Validate JWT access token (RS256, 1-hour expiration)
+   → Check token_blacklist table (reject revoked tokens)
+   → Extract user_id from JWT payload (get_jwt_identity())
+
+4. Validation:
+   → Verify required fields: type, input_ref
+   → Validate type ∈ {transcription, translation}
+   → Return 400 if invalid
+
+5. Job Creation:
+   job = Job(user_id=user_id, type=type, status='queued', input_ref=input_ref)
+   db.session.add(job)
+   db.session.commit()
+
+6. Response:
+   → Return 201 Created
+   → JSON: job.to_dict() (includes id, user_id, type, status, created_at, artifacts=[])
+
+---
+
+Client → GET /saas/jobs?status=done&limit=10&offset=0
+Headers: Authorization: Bearer <JWT access token>
+
+1. Authentication: @jwt_required() → extract user_id
+
+2. Query Building:
+   → Base: Job.query.filter_by(user_id=user_id)
+   → Apply filters: status, type (if provided)
+   → Order: Job.created_at.desc() (newest first)
+   → Pagination: limit (default 100, max 500), offset (default 0)
+
+3. Execution:
+   → Count total matches (before pagination)
+   → Apply limit/offset
+   → Fetch jobs with artifacts (eager loading)
+
+4. Response:
+   → Return 200 OK
+   → JSON: {jobs: [...], total: N, limit: M, offset: O}
+
+---
+
+Client → GET /saas/jobs/123
+Headers: Authorization: Bearer <JWT access token>
+
+1. Authentication: @jwt_required() → extract user_id
+
+2. Fetch Job:
+   → Job.query.filter_by(id=job_id).first()
+   → If not found: return 404
+
+3. Ownership Check:
+   → if job.user_id != user_id: return 403 Forbidden
+   → Users can ONLY access their own jobs
+
+4. Response:
+   → Return 200 OK
+   → JSON: job.to_dict() (includes all artifacts)
+```
+
+**Key Design Decisions for SaaS Jobs:**
+
+- **Minimal persistence:** No async workers, queues, or business logic - just database CRUD
+- **User isolation:** Strict ownership enforcement at query level (users never see other users' jobs)
+- **Synchronous:** Jobs are created immediately, status updates handled externally
+- **Artifact references:** Storage refs only (no embedded data) - points to S3/object storage
+- **No rewriting:** Existing transcription/translation logic remains unchanged
+- **JWT-only:** Uses Flask-JWT-Extended (@jwt_required) for authentication, not API keys
 
 ### 3. **models/ (Database Schema)**
 - **models/__init__.py:** Exports `db` (SQLAlchemy), `bcrypt`, `init_db(app)`

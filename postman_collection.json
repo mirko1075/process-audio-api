@@ -1381,6 +1381,18 @@
       "value": "your-api-key-here",
       "type": "string",
       "description": "API key for authentication (x-api-key header)"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string",
+      "description": "JWT access token for Bearer authentication (expires in 1 hour)"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string",
+      "description": "JWT refresh token for renewing access token (expires in 30 days)"
     }
   ]
 }

@@ -12,7 +12,8 @@ This runbook provides step-by-step debugging procedures for common failure scena
 2. [How to Debug a Failed Translation](#2-how-to-debug-a-failed-translation)
 3. [How to Debug WebSocket Audio Streaming](#3-how-to-debug-websocket-audio-streaming)
 4. [How to Debug JWT Authentication Issues](#4-how-to-debug-jwt-authentication-issues)
-5. [Common Failure Modes](#5-common-failure-modes)
+5. [How to Debug SaaS Job Issues](#5-how-to-debug-saas-job-issues)
+6. [Common Failure Modes](#6-common-failure-modes)
 
 ---
 
@@ -835,7 +836,203 @@ psql $DATABASE_URL -c "DELETE FROM token_blacklist WHERE expires_at < NOW() - IN
 
 ---
 
-## 5. Common Failure Modes
+## 5. How to Debug SaaS Job Issues
+
+### SaaS Job Symptoms
+
+- HTTP 400/404/403 responses from `/saas/jobs` endpoints
+- Jobs not appearing in list results
+- "Job not found" errors when retrieving by ID
+- "Forbidden" errors when accessing jobs
+- Empty job lists when jobs should exist
+
+### Investigation Steps
+
+#### Step 1: Verify Database Tables Exist
+
+```bash
+# Check if jobs and artifacts tables exist
+# Connect to PostgreSQL database
+
+psql $DATABASE_URL -c "\dt jobs"
+psql $DATABASE_URL -c "\dt artifacts"
+
+# Expected: Both tables should exist
+# If missing: Run migration script
+python scripts/migrate_add_jobs_artifacts.py
+```
+
+#### Step 2: Check JWT Authentication
+
+```bash
+# Verify JWT token is valid and not expired
+# Access Render logs for authentication errors
+
+Pattern: "Missing Authorization Header" OR "Signature verification failed"
+Location: Flask-JWT-Extended middleware
+
+# Common issues:
+• Token expired (access tokens expire after 1 hour)
+• Token revoked (check token_blacklist table)
+• Invalid signature (JWT_SECRET_KEY mismatch)
+• Missing Authorization header
+
+# Resolution:
+→ Refresh token: POST /auth/refresh with refresh_token
+→ Re-login: POST /auth/login to get new tokens
+```
+
+#### Step 3: Verify Job Creation
+
+```bash
+# Test creating a job via curl
+curl -X POST https://your-api.onrender.com/saas/jobs \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "transcription",
+    "input_ref": "s3://test-bucket/test.wav"
+  }'
+
+# Expected: 201 Created with job JSON
+# Actual error responses:
+• 400: Missing/invalid fields (type, input_ref)
+• 401: Missing or invalid JWT token
+• 422: Malformed JSON body
+```
+
+#### Step 4: Check Ownership Isolation
+
+```bash
+# Common issue: User trying to access another user's job
+
+# Query database to verify job ownership:
+psql $DATABASE_URL -c "SELECT id, user_id, type, status FROM jobs WHERE id = 123;"
+
+# Compare user_id in job with user_id from JWT token
+# Extract user_id from JWT:
+echo $ACCESS_TOKEN | cut -d'.' -f2 | base64 -d | jq '.sub'
+
+# If user_id mismatch → 403 Forbidden (expected behavior)
+```
+
+#### Step 5: Inspect Database Queries
+
+```bash
+# Enable SQLAlchemy query logging (locally):
+export SQLALCHEMY_ECHO=True
+
+# Check Render logs for SQL queries:
+Pattern: "SELECT ... FROM jobs WHERE user_id = ..."
+Pattern: "INSERT INTO jobs ..."
+
+# Verify:
+→ Queries filter by user_id correctly
+→ No SQL errors (foreign key violations, etc.)
+→ Pagination parameters applied (LIMIT, OFFSET)
+```
+
+#### Step 6: Test Pagination and Filtering
+
+```bash
+# Test list endpoint with filters
+curl "https://your-api.onrender.com/saas/jobs?status=done&limit=5&offset=0" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+
+# Expected: JSON with {jobs: [...], total: N, limit: 5, offset: 0}
+
+# Common issues:
+• limit > 500: Automatically capped to 500
+• Invalid status/type values: No error, just empty results
+• Negative offset: May cause query errors
+```
+
+#### Step 7: Verify Artifact Relationships
+
+```bash
+# Check if artifacts are returned with jobs
+curl "https://your-api.onrender.com/saas/jobs/123" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+
+# Expected: job.artifacts array with artifact objects
+
+# If missing:
+→ Check foreign key: artifacts.job_id = jobs.id
+→ Verify cascade delete is working: delete job → artifacts deleted
+
+# Query artifacts table:
+psql $DATABASE_URL -c "SELECT * FROM artifacts WHERE job_id = 123;"
+```
+
+### Common Error Patterns
+
+| Error | Cause | Resolution |
+|-------|-------|------------|
+| 400 "Missing required field: type" | POST body missing type field | Include type: "transcription" or "translation" |
+| 400 "Invalid type" | type not in allowed values | Use only "transcription" or "translation" |
+| 401 "Missing Authorization Header" | No JWT token in request | Add `Authorization: Bearer <token>` header |
+| 401 "Signature verification failed" | JWT_SECRET_KEY mismatch or token corruption | Generate new token via /auth/login |
+| 401 "Token has expired" | Access token older than 1 hour | Refresh token via POST /auth/refresh |
+| 401 "Token has been revoked" | Token in blacklist (user logged out) | Re-login to get new tokens |
+| 403 "Forbidden: You do not have access to this job" | User accessing another user's job | Users can only access their own jobs |
+| 404 "Job not found" | Job ID doesn't exist or wrong ID | Verify job ID, check database |
+| 500 Database connection error | DATABASE_URL incorrect or DB down | Check Render PostgreSQL service status |
+
+### Debugging Checklist
+
+- [ ] Jobs and artifacts tables exist in database
+- [ ] JWT token is valid and not expired
+- [ ] JWT_SECRET_KEY matches between token generation and validation
+- [ ] Request includes `Authorization: Bearer <token>` header
+- [ ] Request body is valid JSON with required fields (for POST)
+- [ ] Job ID exists in database (for GET /saas/jobs/{id})
+- [ ] User owns the job being accessed (user_id match)
+- [ ] Database foreign key constraints are intact
+- [ ] SQLAlchemy relationships loaded correctly (check eager loading)
+
+### Recovery Procedures
+
+#### Recreate Missing Tables
+
+```bash
+# If tables are missing or corrupted
+python scripts/migrate_add_jobs_artifacts.py
+
+# Verify tables created:
+psql $DATABASE_URL -c "\d jobs"
+psql $DATABASE_URL -c "\d artifacts"
+```
+
+#### Clean Up Orphaned Artifacts
+
+```bash
+# Find artifacts without corresponding jobs
+psql $DATABASE_URL -c "
+  SELECT a.id, a.job_id, a.kind
+  FROM artifacts a
+  LEFT JOIN jobs j ON a.job_id = j.id
+  WHERE j.id IS NULL;
+"
+
+# Delete orphaned artifacts (if cascade delete failed):
+psql $DATABASE_URL -c "
+  DELETE FROM artifacts
+  WHERE job_id NOT IN (SELECT id FROM jobs);
+"
+```
+
+#### Reset User's Job List
+
+```bash
+# Delete all jobs for a specific user (CAREFUL - IRREVERSIBLE)
+psql $DATABASE_URL -c "DELETE FROM jobs WHERE user_id = 'user_123';"
+
+# Cascade delete will automatically remove associated artifacts
+```
+
+---
+
+## 6. Common Failure Modes
 
 ### Database Connection Failures
 

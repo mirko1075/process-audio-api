@@ -346,6 +346,170 @@ paths:
                     type: string
                     example: "ok"
 
+  /saas/jobs:
+    post:
+      summary: Create a new job
+      description: |
+        Create a new transcription or translation job.
+        The job will be created in 'queued' status.
+      tags:
+        - SaaS Jobs
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - type
+                - input_ref
+              properties:
+                type:
+                  type: string
+                  enum: [transcription, translation]
+                  description: Type of job to create
+                  example: "transcription"
+                input_ref:
+                  type: string
+                  description: Reference to input file or text (file key or text hash)
+                  example: "s3://bucket/audio/file123.wav"
+      responses:
+        '201':
+          description: Job created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '400':
+          description: Invalid request (missing or invalid fields)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      summary: List all jobs for the authenticated user
+      description: |
+        Retrieve all jobs belonging to the authenticated user.
+        Supports filtering by status and type, with pagination.
+      tags:
+        - SaaS Jobs
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [queued, processing, done, failed]
+          description: Filter jobs by status
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [transcription, translation]
+          description: Filter jobs by type
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+          description: Maximum number of results to return
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of results to skip for pagination
+      responses:
+        '200':
+          description: List of jobs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Job'
+                  total:
+                    type: integer
+                    description: Total number of jobs matching the filter
+                    example: 42
+                  limit:
+                    type: integer
+                    description: Limit applied to this response
+                    example: 100
+                  offset:
+                    type: integer
+                    description: Offset applied to this response
+                    example: 0
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /saas/jobs/{job_id}:
+    get:
+      summary: Get a specific job by ID
+      description: |
+        Retrieve details of a specific job.
+        Ownership is enforced - users can only retrieve their own jobs.
+      tags:
+        - SaaS Jobs
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Job ID
+      responses:
+        '200':
+          description: Job details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (job belongs to another user)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /transcriptions/deepgram:
     post:
       summary: Transcribe audio using Deepgram Nova-2 with speaker diarization
@@ -1642,6 +1806,86 @@ components:
         required:
           - sentiment
 
+    Job:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Unique job identifier
+          example: 123
+        user_id:
+          type: string
+          description: User ID who owns this job
+          example: "auth0|123456789"
+        type:
+          type: string
+          enum: [transcription, translation]
+          description: Type of job
+          example: "transcription"
+        status:
+          type: string
+          enum: [queued, processing, done, failed]
+          description: Current status of the job
+          example: "done"
+        input_ref:
+          type: string
+          description: Reference to input file or text (file key or text hash)
+          example: "s3://bucket/audio/file123.wav"
+        error_message:
+          type: string
+          nullable: true
+          description: Error details if job failed
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          description: Job creation timestamp
+          example: "2023-10-16T19:35:02.584833"
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Job completion timestamp
+          example: "2023-10-16T19:45:12.123456"
+        artifacts:
+          type: array
+          description: Array of output artifacts produced by this job
+          items:
+            $ref: '#/components/schemas/Artifact'
+      required:
+        - id
+        - user_id
+        - type
+        - status
+        - input_ref
+        - created_at
+
+    Artifact:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Unique artifact identifier
+          example: 456
+        job_id:
+          type: integer
+          description: Job ID this artifact belongs to
+          example: 123
+        kind:
+          type: string
+          enum: [transcript, translation, srt, json]
+          description: Type of artifact
+          example: "transcript"
+        storage_ref:
+          type: string
+          description: Reference to stored artifact (file path, URL, or object storage key)
+          example: "s3://bucket/outputs/transcript_123.txt"
+      required:
+        - id
+        - job_id
+        - kind
+        - storage_ref
+
     ErrorResponse:
       type: object
       properties:
@@ -1667,6 +1911,8 @@ tags:
     description: Health check endpoints
   - name: Authentication
     description: User authentication, JWT token management, and logout
+  - name: SaaS Jobs
+    description: Job persistence and retrieval for SaaS workflow
   - name: Transcription
     description: Audio transcription services
   - name: Translation
