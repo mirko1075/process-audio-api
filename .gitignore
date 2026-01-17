@@ -21,9 +21,11 @@ server_test.pid
 uploads/
 *.pid
 
-# Test/Development files
+# Test/Development files (but keep tests/ directory)
 test_*.py
 *_test.py
+!tests/test_*.py
+!tests/*_test.py
 
 # Documentation that's not needed in production
 AUTHENTICATION_IMPLEMENTATION.md
