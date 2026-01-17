@@ -1,5 +1,9 @@
 """Main application entry point using Flask application factory pattern."""
 
+# CRITICAL: Monkey patch must be first import when using eventlet with gunicorn
+import eventlet
+eventlet.monkey_patch()
+
 import os
 from core import create_app
 

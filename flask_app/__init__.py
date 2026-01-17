@@ -95,6 +95,15 @@ def create_app(config_override: Optional[dict] = None) -> Tuple[Flask, SocketIO]
 
 def init_database(app: Flask) -> None:
     """Initialize database extensions and create tables."""
+    # Check if database URL is configured
+    database_url = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+
+    # Skip database initialization if using default localhost URL in production
+    if 'localhost' in database_url and not app.debug:
+        logging.warning("Database URL not configured for production - skipping database initialization")
+        logging.warning("Some features requiring authentication will not be available")
+        return
+
     try:
         from models import init_db
         init_db(app)
@@ -107,9 +116,8 @@ def init_database(app: Flask) -> None:
         logging.info("Database initialized successfully")
     except Exception as e:
         logging.error(f"Database initialization failed: {str(e)}")
-        # In development, continue without database
-        if app.debug:
-            logging.warning("Continuing without database in debug mode")
+        logging.warning("Continuing without database - authentication features will be unavailable")
+        # Don't re-raise - allow app to start without database
 
 
 def init_jwt_manager(app: Flask) -> None:
