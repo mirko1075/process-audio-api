@@ -53,9 +53,18 @@ def create_app(config_override: Optional[dict] = None) -> Tuple[Flask, SocketIO]
     if not app.config['SECRET_KEY']:
         raise RuntimeError("SECRET_KEY environment variable is required")
 
-    # Configure CORS
-    CORS(app, origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-         supports_credentials=True)
+    # Configure CORS - use environment variable for flexibility
+    cors_origins = os.getenv('CORS_ORIGINS', '')
+    if cors_origins == '*':
+        # Allow all origins (development only)
+        CORS(app, origins='*', supports_credentials=True)
+    else:
+        # Use specific origins from environment
+        allowed_cors_origins = [origin.strip() for origin in cors_origins.split(',') if origin.strip()]
+        if not allowed_cors_origins:
+            # Fallback to localhost:3000 if not configured
+            allowed_cors_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+        CORS(app, origins=allowed_cors_origins, supports_credentials=True)
 
     # Setup logging
     configure_logging()
@@ -208,7 +217,7 @@ def register_error_handlers(app: Flask) -> None:
 
     @app.errorhandler(400)
     def bad_request(error):
-        return jsonify({'error': 'Bad request'}), 400
+        return jsonify({'error': 'Bad request'}), 4
 
     @app.errorhandler(401)
     def unauthorized(error):
@@ -221,17 +230,17 @@ def register_error_handlers(app: Flask) -> None:
     @app.errorhandler(500)
     def internal_error(error):
         app.logger.error(f"Internal server error: {error}")
-        return jsonify({'error': 'Internal server error'}), 500
+        return jsonify({'error': 'Internal server error'}), 5
 
     @app.errorhandler(TranscriptionError)
     def handle_transcription_error(error):
         app.logger.error(f"Transcription error: {error}")
-        return jsonify({'error': str(error)}), 400
+        return jsonify({'error': str(error)}), 4
 
     @app.errorhandler(TranslationError)
     def handle_translation_error(error):
         app.logger.error(f"Translation error: {error}")
-        return jsonify({'error': str(error)}), 400
+        return jsonify({'error': str(error)}), 4
 
     @app.errorhandler(HTTPException)
     def handle_http_exception(error):
