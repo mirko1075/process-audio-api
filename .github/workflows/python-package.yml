@@ -49,6 +49,11 @@ jobs:
         echo "ASSEMBLYAI_API_KEY=test-assemblyai-key" >> $GITHUB_ENV
         echo "DEEPSEEK_API_KEY=test-deepseek-key" >> $GITHUB_ENV
         echo "FLASK_ENV=testing" >> $GITHUB_ENV
+        echo "AUTH0_DOMAIN=test-domain.auth0.com" >> $GITHUB_ENV
+        echo "AUTH0_AUDIENCE=https://test-api.example.com" >> $GITHUB_ENV
+        echo "SUPABASE_URL=https://test-project.supabase.co" >> $GITHUB_ENV
+        echo "SUPABASE_SERVICE_ROLE_KEY=mock-service-role-key-for-testing" >> $GITHUB_ENV
+        echo "SUPABASE_STORAGE_BUCKET=saas-files" >> $GITHUB_ENV
     - name: Test with pytest
       run: |
         pytest -v --tb=short
