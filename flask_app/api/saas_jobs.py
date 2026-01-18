@@ -75,8 +75,12 @@ def create_job():
             return jsonify({'error': 'Missing file upload'}), 400
 
         file = request.files['file']
-        if file.filename == '':
+        if not file.filename or file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
+
+        # Additional validation: Check for suspiciously long filenames
+        if len(file.filename) > 255:
+            return jsonify({'error': 'Filename too long (max 255 characters)'}), 400
 
         # Create job
         job = Job(
@@ -182,18 +186,31 @@ def list_jobs():
     # Build query - exclude deleted jobs
     query = Job.query.filter_by(user_id=user_id).filter(Job.status != 'deleted')
 
-    # Apply filters
+    # Apply filters with validation
     status_filter = request.args.get('status')
     if status_filter:
+        # Validate status against allowed values to prevent SQL injection
+        allowed_statuses = ['queued', 'processing', 'done', 'failed']
+        if status_filter not in allowed_statuses:
+            return jsonify({'error': f'Invalid status filter. Must be one of: {", ".join(allowed_statuses)}'}), 400
         query = query.filter_by(status=status_filter)
 
     type_filter = request.args.get('type')
     if type_filter:
+        # Validate type against allowed values to prevent SQL injection
+        allowed_types = ['transcription', 'translation']
+        if type_filter not in allowed_types:
+            return jsonify({'error': f'Invalid type filter. Must be one of: {", ".join(allowed_types)}'}), 400
         query = query.filter_by(type=type_filter)
 
-    # Pagination
-    limit = min(int(request.args.get('limit', 100)), 500)
-    offset = int(request.args.get('offset', 0))
+    # Pagination with input validation
+    try:
+        limit = min(int(request.args.get('limit', 100)), 500)
+        offset = int(request.args.get('offset', 0))
+        if limit < 1 or offset < 0:
+            return jsonify({'error': 'Invalid pagination parameters'}), 400
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid pagination parameters: limit and offset must be integers'}), 400
 
     # Order by created_at descending (newest first)
     query = query.order_by(Job.created_at.desc())

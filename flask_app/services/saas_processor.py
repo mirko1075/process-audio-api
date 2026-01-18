@@ -377,6 +377,15 @@ class SaasProcessorService:
 
         # Create usage log record directly
         # IMPORTANT: Do NOT use log_usage() helper which relies on g.current_user
+        # Safely extract request context (can be None in background jobs)
+        try:
+            ip_address = request.remote_addr if request and hasattr(request, 'remote_addr') else None
+            user_agent = request.headers.get('User-Agent', '') if request and hasattr(request, 'headers') else ''
+        except RuntimeError:
+            # Outside of request context (e.g., background job)
+            ip_address = None
+            user_agent = ''
+
         usage_log = UsageLog(
             user_id=self.user_id,  # Explicit user_id from constructor
             service=job.type,
@@ -385,8 +394,8 @@ class SaasProcessorService:
             tokens_used=tokens_used,
             characters_processed=characters_processed,
             cost_usd=cost_usd,
-            ip_address=request.remote_addr if request else None,
-            user_agent=request.headers.get('User-Agent', '') if request else ''
+            ip_address=ip_address,
+            user_agent=user_agent
         )
 
         db.session.add(usage_log)

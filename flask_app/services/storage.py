@@ -1,9 +1,11 @@
 """Supabase Storage service for SaaS file uploads and artifact management."""
 import os
 import logging
+import re
 from typing import BinaryIO, Optional
 from supabase import create_client, Client
 from werkzeug.datastructures import FileStorage
+from werkzeug.utils import secure_filename
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +53,62 @@ class SupabaseStorageService:
             logger.error(f"Failed to initialize Supabase client: {e}")
             raise RuntimeError(f"Supabase initialization failed: {e}")
 
+    def _sanitize_filename(self, filename: str) -> str:
+        """Sanitize filename to prevent path traversal attacks.
+
+        Args:
+            filename: Original filename
+
+        Returns:
+            Sanitized filename
+
+        Raises:
+            ValueError: If filename is invalid or contains path traversal
+        """
+        if not filename:
+            raise ValueError("Filename cannot be empty")
+
+        # Remove any path components (prevent path traversal)
+        filename = os.path.basename(filename)
+
+        # Use werkzeug's secure_filename for additional sanitization
+        filename = secure_filename(filename)
+
+        if not filename:
+            raise ValueError("Invalid filename after sanitization")
+
+        # Check for path traversal attempts
+        if '..' in filename or filename.startswith('/'):
+            raise ValueError("Filename contains invalid path components")
+
+        return filename
+
+    def _validate_file_extension(self, filename: str, allowed_extensions: set) -> str:
+        """Validate and extract file extension.
+
+        Args:
+            filename: Filename to validate
+            allowed_extensions: Set of allowed extensions (with dots, e.g., {'.mp3', '.wav'})
+
+        Returns:
+            Validated extension (with dot)
+
+        Raises:
+            ValueError: If extension is not allowed
+        """
+        ext = os.path.splitext(filename)[1].lower()
+
+        if not ext:
+            raise ValueError("File must have an extension")
+
+        if ext not in allowed_extensions:
+            raise ValueError(
+                f"File extension '{ext}' not allowed. "
+                f"Allowed: {', '.join(sorted(allowed_extensions))}"
+            )
+
+        return ext
+
     def upload_input(
         self,
         user_id: str,
@@ -85,7 +143,18 @@ class SupabaseStorageService:
                 f"maximum allowed ({self.max_upload_size_mb}MB)"
             )
 
-        # Validate content type
+        # Sanitize filename to prevent path traversal
+        safe_filename = self._sanitize_filename(original_filename)
+
+        # Validate file extension
+        allowed_extensions = {
+            '.mp3', '.wav', '.webm', '.ogg', '.m4a', '.flac',  # audio
+            '.mp4', '.webm', '.mov', '.avi',  # video
+            '.txt', '.json'  # text
+        }
+        ext = self._validate_file_extension(safe_filename, allowed_extensions)
+
+        # Validate content type matches extension
         content_type = file.content_type
         if content_type not in self.allowed_upload_types:
             raise ValueError(
@@ -93,11 +162,9 @@ class SupabaseStorageService:
                 f"Allowed types: {', '.join(self.allowed_upload_types)}"
             )
 
-        # Extract file extension from original filename
-        ext = os.path.splitext(original_filename)[1] or ''
-
         # Construct storage path
         # Path: users/{user_id}/jobs/{job_id}/input/original.{ext}
+        # Note: user_id and job_id are from trusted sources (JWT and DB)
         storage_path = f"users/{user_id}/jobs/{job_id}/input/original{ext}"
 
         try:
