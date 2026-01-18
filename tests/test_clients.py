@@ -32,7 +32,7 @@ def test_openai_client_initialization(mock_env):
 def test_deepgram_client_initialization(mock_env):
     """Test Deepgram client can be initialized."""
     try:
-    from core.clients.deepgram import DeepgramClient
+        from core.clients.deepgram import DeepgramClient
         client = DeepgramClient()
         assert client is not None
     except ImportError:
@@ -72,22 +72,22 @@ def test_text_chunking_functionality(mock_env):
 def test_tokenizer_functionality(mock_env):
     """Test tokenizer functionality without API calls."""
     try:
-    from core.clients.openai import OpenAIClient
+        from core.clients.openai import OpenAIClient
         client = OpenAIClient()
-        
+
         if hasattr(client, '_tokenizer'):
             # Test basic tokenization
             test_text = "Hello, this is a test sentence."
             tokens = client._tokenizer.encode(test_text)
-            
+
             assert isinstance(tokens, list)
             assert len(tokens) > 0
-            
+
             # Test that longer text has more tokens
             longer_text = test_text * 5
             longer_tokens = client._tokenizer.encode(longer_text)
             assert len(longer_tokens) > len(tokens)
-            
+
     except Exception as e:
         # Expected to fail in test environment without proper API setup
         assert "API key" in str(e) or "tiktoken" in str(e) or "OpenAI" in str(e)
@@ -97,16 +97,16 @@ def test_tokenizer_functionality(mock_env):
 def test_openai_client_timeout_configuration(mock_openai, mock_env):
     """Test that OpenAI client initialization works with timeout configuration."""
     try:
-    from core.clients.openai import OpenAIClient
-        
+        from core.clients.openai import OpenAIClient
+
         # Mock OpenAI client to avoid actual API calls
         mock_openai.return_value = Mock()
-        
+
         client = OpenAIClient()
-        
+
         # If we get here, initialization worked
         assert client is not None
-        
+
     except Exception as e:
         # Expected to fail in test environment
         assert "API key" in str(e) or "timeout" in str(e) or "OpenAI" in str(e)
@@ -119,9 +119,9 @@ def test_error_handling_initialization():
     original_key = os.environ.get('OPENAI_API_KEY')
     if 'OPENAI_API_KEY' in os.environ:
         del os.environ['OPENAI_API_KEY']
-    
+
     try:
-    from core.clients.openai import OpenAIClient
+        from core.clients.openai import OpenAIClient
         client = OpenAIClient()
         # If no exception is raised, the client might have fallback behavior
         # which is also acceptable

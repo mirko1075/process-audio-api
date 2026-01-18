@@ -348,14 +348,19 @@ paths:
 
   /saas/jobs:
     post:
-      summary: Create a new job with optional file upload
+      summary: Create and process a new job
       description: |
-        Create a new transcription or translation job.
-        Supports two modes:
-        1. JSON mode: Provide an existing input_ref (storage path)
-        2. File upload mode: Upload a new audio/video/text file
+        Create a new transcription or translation job and immediately process it.
+        Supports two input modes:
+        1. File upload mode (multipart/form-data): Upload audio/video file for transcription or text file for translation
+        2. Text mode (application/json): Provide text directly for translation jobs
 
-        The job will be created in 'queued' status.
+        **STEP 4 Enhancement:** Jobs are now synchronously processed using the specified service.
+        The job progresses through statuses: queued → processing → done/failed.
+
+        **Service Selection:**
+        - Transcription services: deepgram, whisper, assemblyai
+        - Translation services: openai, google, deepseek
       tags:
         - SaaS Jobs
       security:
@@ -368,22 +373,38 @@ paths:
               type: object
               required:
                 - type
-                - input_ref
+                - service
+                - text
+                - target_language
               properties:
                 type:
                   type: string
-                  enum: [transcription, translation]
-                  description: Type of job to create
-                  example: "transcription"
-                input_ref:
+                  enum: [translation]
+                  description: Must be 'translation' for JSON mode
+                  example: "translation"
+                service:
                   type: string
-                  description: Reference to input file or text (storage path)
-                  example: "users/auth0|123/jobs/456/input/original.wav"
+                  enum: [openai, google, deepseek]
+                  description: Translation service to use
+                  example: "google"
+                text:
+                  type: string
+                  description: Text to translate
+                  example: "Hello, how are you?"
+                target_language:
+                  type: string
+                  description: Target language code
+                  example: "es"
+                source_language:
+                  type: string
+                  description: Source language code (optional, auto-detect if not provided)
+                  example: "en"
           multipart/form-data:
             schema:
               type: object
               required:
                 - type
+                - service
                 - file
               properties:
                 type:
@@ -391,10 +412,42 @@ paths:
                   enum: [transcription, translation]
                   description: Type of job to create
                   example: "transcription"
+                service:
+                  type: string
+                  description: Service to use (deepgram/whisper/assemblyai for transcription, openai/google/deepseek for translation)
+                  example: "deepgram"
                 file:
                   type: string
                   format: binary
                   description: Audio/video/text file to upload (max 100MB by default)
+                language:
+                  type: string
+                  description: Language code for transcription (optional)
+                  example: "en"
+                diarize:
+                  type: boolean
+                  description: Enable speaker diarization (transcription only)
+                  example: false
+                punctuate:
+                  type: boolean
+                  description: Enable punctuation (transcription only)
+                  example: true
+                paragraphs:
+                  type: boolean
+                  description: Enable paragraph detection (transcription only)
+                  example: false
+                model:
+                  type: string
+                  description: Model to use (service-specific)
+                  example: "nova-2"
+                target_language:
+                  type: string
+                  description: Target language code (translation only)
+                  example: "es"
+                source_language:
+                  type: string
+                  description: Source language code (translation only, optional)
+                  example: "en"
       responses:
         '201':
           description: Job created successfully
@@ -422,9 +475,13 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
     get:
-      summary: List all jobs for the authenticated user
+      summary: List all jobs for the authenticated user (lightweight)
       description: |
         Retrieve all jobs belonging to the authenticated user.
+
+        **STEP 4 Enhancement:** Returns lightweight data (id, type, status, fileName, created_at) for performance.
+        Automatically excludes jobs with status='deleted'.
+
         Supports filtering by status and type, with pagination.
       tags:
         - SaaS Jobs
@@ -437,7 +494,7 @@ paths:
           schema:
             type: string
             enum: [queued, processing, done, failed]
-          description: Filter jobs by status
+          description: Filter jobs by status (deleted jobs are always excluded)
         - name: type
           in: query
           required: false
@@ -464,7 +521,7 @@ paths:
           description: Number of results to skip for pagination
       responses:
         '200':
-          description: List of jobs
+          description: List of jobs (lightweight representation)
           content:
             application/json:
               schema:
@@ -473,7 +530,7 @@ paths:
                   jobs:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Job'
+                      $ref: '#/components/schemas/JobMinimal'
                   total:
                     type: integer
                     description: Total number of jobs matching the filter
@@ -495,9 +552,14 @@ paths:
 
   /saas/jobs/{job_id}:
     get:
-      summary: Get a specific job by ID
+      summary: Get job metadata by ID
       description: |
-        Retrieve details of a specific job.
+        Retrieve metadata of a specific job.
+
+        **STEP 4 Enhancement:** Returns metadata-only (excludes actual transcript/translation content).
+        To access content, use the artifact download endpoint with signed URLs.
+        Automatically returns 404 for deleted jobs (status='deleted').
+
         Ownership is enforced - users can only retrieve their own jobs.
       tags:
         - SaaS Jobs
@@ -512,11 +574,66 @@ paths:
           description: Job ID
       responses:
         '200':
-          description: Job details
+          description: Job metadata (no content)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Job'
+                $ref: '#/components/schemas/JobMetadata'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (job belongs to another user)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Job not found (or job is deleted)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      summary: Soft-delete a job
+      description: |
+        Soft-delete a job by setting its status to 'deleted'.
+
+        **STEP 4 Enhancement:** Implements idempotent soft deletion.
+        - Deleted jobs are excluded from list and get endpoints
+        - Deletion is permanent (no restore functionality)
+        - Returns success even if already deleted (idempotent)
+
+        Ownership is enforced - users can only delete their own jobs.
+      tags:
+        - SaaS Jobs
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Job ID to delete
+      responses:
+        '200':
+          description: Job deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Job deleted successfully"
+                  job_id:
+                    type: integer
+                    example: 123
         '401':
           description: Unauthorized
           content:
@@ -1959,6 +2076,7 @@ components:
 
     Job:
       type: object
+      description: Full job representation with all fields and artifacts
       properties:
         id:
           type: integer
@@ -1975,13 +2093,13 @@ components:
           example: "transcription"
         status:
           type: string
-          enum: [queued, processing, done, failed]
+          enum: [queued, processing, done, failed, deleted]
           description: Current status of the job
           example: "done"
         input_ref:
           type: string
-          description: Reference to input file or text (file key or text hash)
-          example: "s3://bucket/audio/file123.wav"
+          description: Reference to input file or text (storage path)
+          example: "users/auth0|123/jobs/456/input/original.wav"
         error_message:
           type: string
           nullable: true
@@ -2001,6 +2119,95 @@ components:
         artifacts:
           type: array
           description: Array of output artifacts produced by this job
+          items:
+            $ref: '#/components/schemas/Artifact'
+      required:
+        - id
+        - user_id
+        - type
+        - status
+        - input_ref
+        - created_at
+
+    JobMinimal:
+      type: object
+      description: Lightweight job representation for list view (STEP 4)
+      properties:
+        id:
+          type: integer
+          description: Unique job identifier
+          example: 123
+        type:
+          type: string
+          enum: [transcription, translation]
+          description: Type of job
+          example: "transcription"
+        status:
+          type: string
+          enum: [queued, processing, done, failed]
+          description: Current status of the job (deleted jobs are excluded)
+          example: "done"
+        fileName:
+          type: string
+          nullable: true
+          description: Original filename extracted from input_ref
+          example: "original.wav"
+        created_at:
+          type: string
+          format: date-time
+          description: Job creation timestamp
+          example: "2023-10-16T19:35:02.584833"
+      required:
+        - id
+        - type
+        - status
+        - created_at
+
+    JobMetadata:
+      type: object
+      description: Job metadata without content (STEP 4)
+      properties:
+        id:
+          type: integer
+          description: Unique job identifier
+          example: 123
+        user_id:
+          type: string
+          description: User ID who owns this job
+          example: "auth0|123456789"
+        type:
+          type: string
+          enum: [transcription, translation]
+          description: Type of job
+          example: "transcription"
+        status:
+          type: string
+          enum: [queued, processing, done, failed]
+          description: Current status of the job (deleted jobs return 404)
+          example: "done"
+        input_ref:
+          type: string
+          description: Reference to input file or text (storage path)
+          example: "users/auth0|123/jobs/456/input/original.wav"
+        error_message:
+          type: string
+          nullable: true
+          description: Error details if job failed
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          description: Job creation timestamp
+          example: "2023-10-16T19:35:02.584833"
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Job completion timestamp
+          example: "2023-10-16T19:45:12.123456"
+        artifacts:
+          type: array
+          description: Array of artifact metadata (storage refs, not content)
           items:
             $ref: '#/components/schemas/Artifact'
       required:

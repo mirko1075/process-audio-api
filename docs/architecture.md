@@ -417,20 +417,213 @@ Headers: Authorization: Bearer <JWT access token>
    → JSON: {artifact_id, job_id, kind, download_url, expires_in_seconds: 300}
 ```
 
-**Key Design Decisions for SaaS Jobs:**
+### STEP 4: SaaS Wrapper Layer - Job Processing (NEW)
 
-- **Minimal persistence:** No async workers, queues, or business logic - just database CRUD
+**Purpose:** Thin orchestration layer that calls existing core services, stores artifacts, and manages job lifecycle WITHOUT modifying core `/transcriptions/*` or `/translations/*` endpoints.
+
+#### Architecture Overview
+```
+POST /saas/jobs (with service parameter)
+         │
+         ├─→ [1] File Upload / Text Submission
+         │        ↓
+         ├─→ [2] Job Creation (status='queued')
+         │        ↓
+         ├─→ [3] SaasProcessorService.process_job()
+         │        ├─→ Download file from storage (temp disk file)
+         │        ├─→ Call core service (/transcriptions/deepgram, etc.)
+         │        ├─→ Parse result
+         │        ├─→ Store artifacts to Supabase Storage
+         │        ├─→ Update job (status='done' or 'failed')
+         │        └─→ Log usage for billing
+         │        ↓
+         └─→ [4] Return job.to_dict() with artifacts
+```
+
+#### SaasProcessorService (flask_app/services/saas_processor.py)
+
+**Responsibilities:**
+- Orchestrate complete job lifecycle (queued → processing → done/failed)
+- Fetch input files from Supabase Storage
+- Call appropriate core service based on service parameter
+- Parse service results and store artifacts
+- Log usage for billing (explicit user_id, not Flask globals)
+
+**Critical Production-Safety Features:**
+1. **Temporary Disk Files (No In-Memory Loading)**
+   - Uses `tempfile.NamedTemporaryFile` for large audio/video files
+   - NEVER loads full files into RAM via BytesIO
+   - Prevents memory exhaustion on large file uploads
+
+2. **NotImplementedError Guards**
+   - Raises `NotImplementedError` in `_process_transcription()` and `_process_translation()`
+   - Prevents silent mock results from running in production
+   - Forces explicit implementation before deployment
+
+3. **Explicit User Context (No Flask g. Globals)**
+   - `__init__(user_id)` constructor takes explicit user_id
+   - `_log_usage()` creates `UsageLog` directly (not via `log_usage()` helper)
+   - Avoids hidden coupling to Flask request context
+
+4. **Internal Service Invocation (MVP Approach)**
+   - Currently uses `app.test_client()` to call `/transcriptions/*` and `/translations/*` endpoints
+   - **Documented as temporary:** Needs auth bypass mechanism for production
+   - Future: Direct service layer calls or internal-only authentication bypass
+
+**Key Methods:**
+- `process_job(job, service, params)` - Main orchestrator, updates job status
+- `_process_transcription(job, service, params)` - Handles transcription jobs (deepgram/whisper/assemblyai)
+- `_process_translation(job, service, params)` - Handles translation jobs (openai/google/deepseek)
+- `_fetch_file_from_storage(storage_ref)` - Downloads file from Supabase Storage
+- `_store_artifacts(job, result, kind)` - Uploads artifacts to Supabase Storage
+- `_log_usage(job, service, result)` - Creates UsageLog for billing
+
+#### Updated Job Flow (STEP 4)
+
+```
+1. Client → POST /saas/jobs
+   Headers: Authorization: Bearer <JWT>, Content-Type: multipart/form-data
+   Body: type=transcription, service=deepgram, file=<audio>, language=en, diarize=true
+
+2. Authentication: @jwt_required() → extract user_id
+
+3. Validation:
+   → Verify required fields: type, service, file (or text for translation)
+   → Validate service based on type:
+      - transcription: deepgram, whisper, assemblyai
+      - translation: openai, google, deepseek
+   → Return 400 if invalid
+
+4. Job Creation (pre-processing):
+   job = Job(user_id=user_id, type=type, status='queued', input_ref='pending')
+   db.session.add(job)
+   db.session.flush()  # Get job.id
+
+5. Storage Upload (for file uploads):
+   storage_path = storage_service.upload_input(user_id, job.id, file, filename)
+   job.input_ref = storage_path
+   db.session.commit()
+
+6. Job Processing (NEW in STEP 4):
+   processor = SaasProcessorService(user_id)
+   job = processor.process_job(job, service, params)
+   → Updates job.status to 'processing'
+   → Calls _process_transcription() or _process_translation()
+     → Downloads file from storage to temp disk file
+     → Calls core service endpoint (e.g., /transcriptions/deepgram)
+     → Parses result
+     → Stores artifacts to Supabase Storage
+   → Updates job.status to 'done' or 'failed'
+   → Logs usage for billing
+   → Returns updated job
+
+7. Response:
+   → Return 201 Created
+   → JSON: job.to_dict() with status='done', artifacts=[...]
+```
+
+#### New Response Formats (STEP 4)
+
+**GET /saas/jobs (Lightweight List View):**
+- Returns `to_dict_minimal()` for performance
+- Fields: `id`, `type`, `status`, `fileName`, `created_at` (5 fields only)
+- Automatically excludes jobs with `status='deleted'`
+
+```json
+{
+  "jobs": [
+    {
+      "id": 123,
+      "type": "transcription",
+      "status": "done",
+      "fileName": "original.wav",
+      "created_at": "2023-10-16T19:35:02.584833"
+    }
+  ],
+  "total": 1,
+  "limit": 100,
+  "offset": 0
+}
+```
+
+**GET /saas/jobs/{id} (Metadata-Only View):**
+- Returns `to_dict_metadata()` (excludes actual content)
+- Includes all job fields + artifact metadata (storage refs, not content)
+- Returns 404 for deleted jobs
+
+```json
+{
+  "id": 123,
+  "user_id": "auth0|123456789",
+  "type": "transcription",
+  "status": "done",
+  "input_ref": "users/auth0|123456789/jobs/123/input/original.wav",
+  "created_at": "2023-10-16T19:35:02.584833",
+  "completed_at": "2023-10-16T19:45:12.123456",
+  "artifacts": [
+    {
+      "id": 456,
+      "job_id": 123,
+      "kind": "transcript",
+      "storage_ref": "users/auth0|123456789/jobs/123/output/transcript.txt"
+    }
+  ]
+}
+```
+
+#### Soft Deletion (STEP 4)
+
+**DELETE /saas/jobs/{id}:**
+```
+Client → DELETE /saas/jobs/123
+Headers: Authorization: Bearer <JWT>
+
+1. Authentication: @jwt_required() → extract user_id
+
+2. Fetch Job & Verify Ownership:
+   → Job.query.filter_by(id=job_id).first()
+   → If not found: return 404
+   → if job.user_id != user_id: return 403
+
+3. Soft Delete:
+   → Set job.status = 'deleted'
+   → db.session.commit()
+   → Operation is idempotent (returns 200 even if already deleted)
+
+4. Response:
+   → Return 200 OK
+   → JSON: {message: "Job deleted successfully", job_id: 123}
+```
+
+**Soft Deletion Behavior:**
+- Deleted jobs have `status='deleted'`
+- Excluded from `GET /saas/jobs` list view (automatic filter)
+- Return 404 from `GET /saas/jobs/{id}` (treated as "not found")
+- No physical deletion - jobs remain in database
+- No restore functionality - deletion is permanent
+
+**Key Design Decisions for SaaS Jobs (Updated for STEP 4):**
+
+- **Minimal persistence:** No async workers, queues, or complex business logic - just database CRUD
 - **User isolation:** Strict ownership enforcement at query level (users never see other users' jobs)
-- **Synchronous:** Jobs are created immediately, status updates handled externally
+- **Synchronous processing (STEP 4):** Jobs are now immediately processed via SaasProcessorService
 - **Artifact references:** Storage refs only (no embedded data) - points to Supabase Storage
-- **No rewriting:** Existing transcription/translation logic remains unchanged
+- **No rewriting:** Existing transcription/translation logic remains unchanged - wrapper calls existing endpoints
 - **JWT-only:** Uses Flask-JWT-Extended (@jwt_required) for authentication, not API keys
+- **Service selection (STEP 4):** Clients specify which provider to use (deepgram/whisper/assemblyai/openai/google/deepseek)
+- **Lightweight responses (STEP 4):** List view returns minimal data (5 fields), detail view returns metadata only (no content)
+- **Soft deletion (STEP 4):** DELETE endpoint sets status='deleted', jobs automatically filtered from list/get endpoints
 - **Storage integration (STEP 3):** Backend-only file uploads via Supabase Storage
   - **Path structure:** `users/{user_id}/jobs/{job_id}/input/original.{ext}` for inputs, `users/{user_id}/jobs/{job_id}/output/{artifact}.{ext}` for outputs
   - **Security:** Path-based ownership verification, signed URLs for downloads (5-min default TTL)
   - **Frontend never uploads directly:** All file uploads go through Flask backend (multipart/form-data → Supabase Storage)
   - **File validation:** Size limits (100MB default), MIME type checking (audio/*, video/*, text/*)
   - **Singleton service:** `get_storage_service()` ensures single Supabase client instance
+- **Production safety (STEP 4):**
+  - Temporary disk files (no in-memory loading for large files)
+  - NotImplementedError guards (prevents silent mock results)
+  - Explicit user context (no Flask g. globals)
+  - Internal service invocation documented as MVP approach
 
 ### 3. **models/ (Database Schema)**
 - **models/__init__.py:** Exports `db` (SQLAlchemy), `bcrypt`, `init_db(app)`
