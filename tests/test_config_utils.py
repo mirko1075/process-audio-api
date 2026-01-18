@@ -27,7 +27,7 @@ def test_flask_app_creation(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
     monkeypatch.setenv("FLASK_ENV", "testing")
     
-    from flask_app import create_app
+    from core import create_app
     
     app, socketio = create_app()
     

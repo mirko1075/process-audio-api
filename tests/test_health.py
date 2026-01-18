@@ -7,7 +7,7 @@ def test_health_endpoint(monkeypatch):
     monkeypatch.setenv("DEEPGRAM_API_KEY", "test")
     monkeypatch.setenv("OPENAI_API_KEY", "test")
 
-    from flask_app import create_app  # Updated import path
+    from core import create_app  # Updated import path
 
     app, socketio = create_app()
     client = app.test_client()
