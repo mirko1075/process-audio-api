@@ -4,12 +4,12 @@ services:
     name: audio-transcription-api
     runtime: python
     plan: starter
-    region: oregon
+    region: frankfurt
     branch: main
     autoDeploy: true
 
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn -k eventlet -w 1 wsgi:application --bind 0.0.0.0:$PORT --log-level info --access-logfile - --error-logfile -
+    startCommand: flask db upgrade && gunicorn -k eventlet -w 1 wsgi:application --bind 0.0.0.0:$PORT --log-level info --access-logfile - --error-logfile -
 
     healthCheckPath: /health
 
@@ -18,6 +18,10 @@ services:
         value: production
       - key: FLASK_APP
         value: app.py
+      - key: DATABASE_URL
+        fromDatabase:
+          name: voxscript-db
+          property: connectionString
       - key: AUTH0_DOMAIN
         sync: false
       - key: AUTH0_AUDIENCE
@@ -33,8 +37,13 @@ services:
         sync: false  # Must be set manually in Render dashboard
       # WebSocket CORS - REQUIRED, comma-separated list of allowed origins
       - key: SOCKETIO_ORIGINS
-        value: "https://meeting-streamer.vercel.app"
+        value: "https://voxscript.vercel.app"
       - key: CORS_ORIGINS
-        value: "https://meeting-streamer.vercel.app/"
+        value: "https://voxscript.vercel.app/"
       - key: LOG_LEVEL
         value: INFO
+
+databases:
+  - name: voxscript-db
+    databaseName: voxscript
+    user: voxscript_user
